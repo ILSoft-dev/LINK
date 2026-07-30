@@ -678,8 +678,6 @@
         originalChapters: null,    // [{title, paragraphs}] или null
         bookmarks: [],
         summaryHistory: [],
-        cumulativeSummary: '',
-        summaryUpToIndex: -1,
         furthestScrollBottom: 0,
     };
     let ALL_PARAGRAPHS = [];
@@ -887,8 +885,6 @@
         // Восстанавливаем состояние именно ЭТОЙ книги
         READER.bookmarks = JSON.parse(bookLoad('bookmarks') || '[]');
         READER.summaryHistory = JSON.parse(bookLoad('summaryHistory') || '[]');
-        READER.cumulativeSummary = bookLoad('cumulativeSummary') || '';
-        READER.summaryUpToIndex = parseInt(bookLoad('summaryUpToIndex') ?? '-1');
         READER.furthestScrollBottom = parseInt(bookLoad('furthestScrollBottom')) || 0;
 
         renderBook(parsedA);
@@ -1180,6 +1176,9 @@
     // ============================================================
     // САММАРИ (инкрементально, по прогрессу чтения — как в предыдущей версии)
     // ============================================================
+    // Для "Моей полки" прогресс должен отражать САМОЕ ДАЛЬНЕЕ место, до которого
+    // вообще когда-либо дочитали, а не текущую позицию (иначе процент "падал"
+    // бы при обычном перечитывании более ранних глав).
     function getFurthestParagraphIndex() {
         let idx = -1;
         for (let i = 0; i < ALL_PARAGRAPHS.length; i++) {
@@ -1187,9 +1186,9 @@
         }
         return idx;
     }
-    // Индекс абзаца по ТЕКУЩЕЙ позиции скролла (а не самой дальней когда-либо
-    // достигнутой) — саммари должно отвечать на "что было до места, где я СЕЙЧАС",
-    // а не спойлерить тем, что уже видели раньше, но сейчас перечитываете сначала.
+    // Индекс абзаца по ТЕКУЩЕЙ позиции скролла — саммари отвечает на "что было
+    // до места, где я СЕЙЧАС", а не спойлерит тем, что видели раньше, но сейчас
+    // перечитываете сначала.
     function getCurrentParagraphIndex() {
         const bottom = window.scrollY + window.innerHeight;
         let idx = -1;
@@ -1198,16 +1197,23 @@
         }
         return idx;
     }
-    function getParagraphRangeText(fromIdx, toIdx) {
-        let text = ALL_PARAGRAPHS.slice(fromIdx, toIdx + 1).map(p => p.textContent.trim()).join('\n');
-        if (text.length > 15000) text = text.slice(0, 15000) + '\n…(текст обрезан)';
-        return text.trim();
+    // Весь прочитанный текст от начала книги до текущего места. Для очень
+    // длинных книг (роман, а не рассказ) берём не первые попавшиеся символы,
+    // а начало (завязка, персонажи) + конец (то, что происходило только что) —
+    // иначе на 20-й главе саммари пересказывало бы только первую главу.
+    function getReadSoFarText(toIdx) {
+        const full = ALL_PARAGRAPHS.slice(0, toIdx + 1).map(p => p.textContent.trim()).join('\n').trim();
+        const LIMIT = 15000;
+        if (full.length <= LIMIT) return full;
+        const headSize = 3000;
+        const tailSize = LIMIT - headSize;
+        return full.slice(0, headSize) + '\n\n…(пропущена середина — книга длинная)…\n\n' + full.slice(-tailSize);
     }
-    function renderSummaryModal(summaryText, isRecap) {
+    function renderSummaryModal(summaryText) {
         openModal('📋 Саммари прочитанного', `
             <div class="summary-text">${escapeHtml(summaryText)}</div>
             <div style="margin-top:1rem;font-size:.75rem;opacity:.5;border-top:1px solid var(--border);padding-top:.5rem;">
-                ${isRecap ? 'Пересказ до текущего места — общий прогресс саммари не сдвигается.' : `Объём: ${summaryText.length} символов`}
+                Объём: ${summaryText.length} символов
             </div>
         `);
     }
@@ -1252,23 +1258,22 @@
         throw new Error('Модель дважды подряд вернула пустой ответ — это известная особенность используемой модели у провайдера (Groq, gpt-oss-120b), не связанная с этим текстом. Попробуйте ещё раз чуть позже.');
     }
 
-    // Лёгкое запоминание "разового" пересказа в памяти (не в хранилище) —
-    // чтобы повторный клик на том же самом месте не дёргал API второй раз подряд
-    let lastRecapIndex = -2;
-    let lastRecapText = '';
+    // Лёгкое запоминание в памяти (не в хранилище) — чтобы повторный клик на
+    // том же самом месте без движения не дёргал API второй раз подряд впустую
+    let lastSummaryIndex = -2;
+    let lastSummaryText = '';
 
     async function generateSummary() {
         const currentIdx = getCurrentParagraphIndex();
         if (currentIdx < 0) { openModal('Саммари', 'Прочитайте хотя бы несколько абзацев, чтобы сгенерировать саммари.'); return; }
 
-        const isExtending = currentIdx > READER.summaryUpToIndex;
-
-        if (!isExtending && currentIdx === lastRecapIndex && lastRecapText) {
-            renderSummaryModal(lastRecapText, true);
+        if (currentIdx === lastSummaryIndex && lastSummaryText) {
+            renderSummaryModal(lastSummaryText);
             return;
         }
 
-        if (!isExtending && getParagraphRangeText(0, currentIdx).length < 100) {
+        const text = getReadSoFarText(currentIdx);
+        if (text.length < 100) {
             openModal('Саммари', 'Прочитайте хотя бы несколько абзацев, чтобы сгенерировать саммари.');
             return;
         }
@@ -1282,27 +1287,7 @@
             const targetLength = Math.round(400 + coverage * 1100);
             const bookLabel = READER.bookTitle ? `«${READER.bookTitle}»` : 'загруженного текста';
 
-            let prompt;
-            if (isExtending && READER.cumulativeSummary) {
-                const newText = getParagraphRangeText(READER.summaryUpToIndex + 1, currentIdx);
-                prompt = `Ты — литературный критик. Ниже — твоё прошлое саммари прочитанной части текста ${bookLabel}, и новый фрагмент, прочитанный ПОСЛЕ этого саммари.
-
-Прошлое саммари:
----
-${READER.cumulativeSummary}
----
-
-Новый фрагмент (только то, что ещё не охвачено прошлым саммари):
----
-${newText}
----
-
-Напиши ОБНОВЛЁННОЕ саммари всей прочитанной части целиком на языке этого текста: сохрани ключевые события и атмосферу из прошлого саммари, добавь события из нового фрагмента, не пересказывай прошлое саммари дословно — перепиши цельным текстом заново. Объём: примерно ${targetLength} символов. Ответь только саммари, без комментариев.`;
-            } else {
-                // Первое саммари вообще, либо возврат назад — считаем строго с начала
-                // книги до ТЕКУЩЕГО места, никогда не затрагивая события дальше него
-                const text = getParagraphRangeText(0, currentIdx);
-                prompt = `Ты — литературный критик. Напиши краткое, содержательное саммари прочитанной части текста ${bookLabel} на языке этого текста.
+            const prompt = `Ты — литературный критик. Напиши краткое, содержательное саммари прочитанной части текста ${bookLabel} на языке этого текста.
 
 Опиши ключевые события, атмосферу и главную интригу. Объём: примерно ${targetLength} символов.
 
@@ -1312,28 +1297,20 @@ ${text}
 ---
 
 Ответь только саммари, без комментариев.`;
-            }
 
             const summary = await callGroq([
                 { role: 'system', content: 'Ты — внимательный литературный критик. Отвечай на языке предложенного текста.' },
                 { role: 'user', content: prompt }
             ], 2000);
 
-            if (isExtending) {
-                READER.cumulativeSummary = summary;
-                READER.summaryUpToIndex = currentIdx;
-                bookSave('cumulativeSummary', summary);
-                bookSave('summaryUpToIndex', String(currentIdx));
-            } else {
-                lastRecapIndex = currentIdx;
-                lastRecapText = summary;
-            }
+            lastSummaryIndex = currentIdx;
+            lastSummaryText = summary;
 
             READER.summaryHistory.push({ timestamp: Date.now(), summary });
             if (READER.summaryHistory.length > 10) READER.summaryHistory.shift();
             bookSave('summaryHistory', JSON.stringify(READER.summaryHistory));
 
-            renderSummaryModal(summary, !isExtending);
+            renderSummaryModal(summary);
         } catch (err) {
             openModal('Саммари', `<div style="color:#ff6b6b;">❌ Ошибка: ${escapeHtml(err.message)}</div>`);
         }
@@ -1380,7 +1357,6 @@ ${text}
                 ? para.previousElementSibling.textContent.trim() : '';
 
             const contextBlock = [
-                READER.cumulativeSummary ? `Краткое содержание прочитанного до этого места:\n${READER.cumulativeSummary}` : '',
                 prevPara ? `Предыдущий абзац:\n${prevPara}` : '',
                 `Абзац с выделением:\n${paraText}`,
                 `Выделенный отрывок:\n"${selected}"`,
