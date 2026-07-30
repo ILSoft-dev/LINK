@@ -272,6 +272,12 @@
         font-weight:600; cursor:pointer;
     }
     .loading{ text-align:center; padding:1.5rem 0; font-family:'Inter',sans-serif; color:var(--text-soft); }
+    .loading-spinner{
+        width:28px; height:28px; margin:0 auto .8rem;
+        border:3px solid var(--border); border-top-color:var(--accent);
+        border-radius:50%; animation:spinLoader .7s linear infinite;
+    }
+    @keyframes spinLoader{ to{ transform:rotate(360deg); } }
     .summary-text, .comment-text{ font-family:'PT Serif', serif; line-height:1.75; white-space:pre-wrap; }
 
     /* ===== Тулбар выделения =====
@@ -297,18 +303,6 @@
         display:flex; align-items:center; gap:5px; white-space:nowrap;
     }
     .selection-toolbar button:hover{ background:var(--accent-soft); color:var(--accent); }
-
-    /* ===== Всплывашка перевода одного слова (тап, без выделения) ===== */
-    .word-popup{
-        position:fixed; z-index:160; display:none;
-        background:var(--bg-card); border:1px solid var(--accent); border-radius:10px;
-        padding:.5rem .8rem; box-shadow:var(--shadow);
-        font-family:'Inter',sans-serif; font-size:.85rem;
-        max-width:min(280px, 80vw); pointer-events:none;
-    }
-    .word-popup.open{ display:block; }
-    .word-popup .wp-word{ color:var(--accent); font-weight:600; }
-    .word-popup .wp-arrow{ opacity:.5; margin:0 .3rem; }
 
     /* ===== Панель оглавления ===== */
     .toc-overlay{ position:fixed; inset:0; background:rgba(20,16,12,.4); z-index:129; display:none; }
@@ -361,10 +355,10 @@
                     <div class="dz-icon">📖</div>
                     <div class="dz-label" id="labelA">Текст для чтения</div>
                     <div class="dz-hint">Перетащите файл сюда или нажмите, чтобы выбрать</div>
-                    <div class="dz-meta">.txt · .fb2</div>
+                    <div class="dz-meta">.txt · .fb2 · .epub · .zip</div>
                     <div class="dz-filename" id="filenameA">Файл не выбран</div>
                     <div class="dz-error" id="errorA"></div>
-                    <input type="file" id="fileA" accept=".txt,.fb2" hidden>
+                    <input type="file" id="fileA" accept=".txt,.fb2,.epub,.zip" hidden>
                 </div>
 
                 <div class="swap-row">
@@ -377,10 +371,10 @@
                     <div class="dz-icon">🔤</div>
                     <div class="dz-label" id="labelB">Оригинал <span style="opacity:.6;font-weight:400;">(необязательно)</span></div>
                     <div class="dz-hint">Для сравнения и «Комментария»</div>
-                    <div class="dz-meta">.txt · .fb2</div>
+                    <div class="dz-meta">.txt · .fb2 · .epub · .zip</div>
                     <div class="dz-filename" id="filenameB">Файл не выбран</div>
                     <div class="dz-error" id="errorB"></div>
-                    <input type="file" id="fileB" accept=".txt,.fb2" hidden>
+                    <input type="file" id="fileB" accept=".txt,.fb2,.epub,.zip" hidden>
                 </div>
             </div>
 
@@ -454,13 +448,13 @@
     <!-- ТУЛБАР ВЫДЕЛЕНИЯ -->
     <div class="selection-toolbar" id="selectionToolbar">
         <div class="st-inner">
+            <button id="selectionTranslateBtn">🌐 Перевод</button>
             <button id="selectionCommentBtn">💬 Комментарий</button>
             <button id="selectionOriginalBtn" style="display:none;">📄 Оригинал</button>
         </div>
     </div>
 
-    <div class="word-popup" id="wordPopup"></div>
-
+<script src="./jszip.min.js"></script>
 <script>
     // ============================================================
     // БЕЗОПАСНАЯ ОБЁРТКА НАД localStorage
@@ -575,20 +569,128 @@
         return chapters;
     }
 
+    // Извлечение .txt/.fb2 из архива .zip: ищем подходящий файл внутри,
+    // игнорируя служебные (__MACOSX, скрытые). Если найдено несколько —
+    // предпочитаем .fb2 (более структурирован), а среди равных берём самый крупный
+    // (чтобы не подхватить случайный readme.txt вместо самой книги).
+    async function parseZIPContainer(arrayBuffer) {
+        const zip = await JSZip.loadAsync(arrayBuffer);
+        const candidates = Object.values(zip.files)
+            .filter(f => !f.dir && !f.name.startsWith('__MACOSX/') && !f.name.split('/').pop().startsWith('.'))
+            .filter(f => /\.(fb2|txt)$/i.test(f.name));
+
+        if (!candidates.length) throw new Error('В архиве не нашлось файла .txt или .fb2.');
+
+        const fb2s = candidates.filter(f => /\.fb2$/i.test(f.name));
+        const pool = fb2s.length ? fb2s : candidates;
+
+        let best = null;
+        for (const f of pool) {
+            const text = await f.async('string');
+            if (!best || text.length > best.text.length) best = { file: f, text };
+        }
+
+        const format = /\.fb2$/i.test(best.file.name) ? 'fb2' : 'txt';
+        const chapters = format === 'fb2' ? parseFB2(best.text) : parseTXT(best.text);
+        return { chapters, format };
+    }
+
+    // EPUB: сам по себе .zip с XHTML-файлами внутри + манифест content.opf,
+    // который задаёт порядок чтения (<spine>). Здесь мы не строим отдельную
+    // логику разбиения на главы (как для .txt) — просто идём по spine файл за
+    // файлом в заданном порядке, и каждый файл естественно становится "главой"
+    // (заголовок берём из первого h1/h2/h3 внутри файла, если он есть).
+    async function parseEPUB(arrayBuffer) {
+        const zip = await JSZip.loadAsync(arrayBuffer);
+
+        const containerFile = zip.file('META-INF/container.xml');
+        if (!containerFile) throw new Error('Не найден META-INF/container.xml — это точно EPUB?');
+        const containerXml = await containerFile.async('string');
+        const containerDoc = new DOMParser().parseFromString(containerXml, 'application/xml');
+        const rootfilePath = containerDoc.querySelector('rootfile')?.getAttribute('full-path');
+        if (!rootfilePath) throw new Error('Не удалось найти content.opf внутри EPUB.');
+
+        const opfFile = zip.file(rootfilePath);
+        if (!opfFile) throw new Error(`Файл ${rootfilePath} не найден внутри EPUB.`);
+        const opfXml = await opfFile.async('string');
+        const opfDoc = new DOMParser().parseFromString(opfXml, 'application/xml');
+        const opfDir = rootfilePath.includes('/') ? rootfilePath.slice(0, rootfilePath.lastIndexOf('/') + 1) : '';
+
+        const manifest = {};
+        opfDoc.querySelectorAll('manifest > item').forEach(item => {
+            manifest[item.getAttribute('id')] = item.getAttribute('href');
+        });
+
+        const spineIds = [...opfDoc.querySelectorAll('spine > itemref')].map(el => el.getAttribute('idref'));
+        if (!spineIds.length) throw new Error('В content.opf не найден <spine> — порядок глав неизвестен.');
+
+        function resolvePath(href) {
+            const parts = (opfDir + href).split('/');
+            const resolved = [];
+            for (const part of parts) {
+                if (part === '..') resolved.pop();
+                else if (part !== '.' && part !== '') resolved.push(part);
+            }
+            return resolved.join('/');
+        }
+
+        const chapters = [];
+        for (const id of spineIds) {
+            const href = manifest[id];
+            if (!href) continue;
+            const path = resolvePath(href);
+            const docFile = zip.file(path) || zip.file(decodeURIComponent(path));
+            if (!docFile) continue;
+
+            const raw = await docFile.async('string');
+            let dom = new DOMParser().parseFromString(raw, 'application/xhtml+xml');
+            if (dom.querySelector('parsererror')) dom = new DOMParser().parseFromString(raw, 'text/html');
+            const body = dom.querySelector('body');
+            if (!body) continue;
+
+            const heading = body.querySelector('h1, h2, h3');
+            const title = heading ? heading.textContent.trim().replace(/\s+/g, ' ') : '';
+
+            let paragraphs = [...body.querySelectorAll('p')]
+                .map(p => p.textContent.trim().replace(/\s+/g, ' '))
+                .filter(Boolean);
+            if (!paragraphs.length) {
+                paragraphs = body.textContent.split(/\n\s*\n/).map(s => s.trim().replace(/\s+/g, ' ')).filter(Boolean);
+            }
+            if (paragraphs.length) chapters.push({ title, paragraphs });
+        }
+
+        if (!chapters.length) throw new Error('Не удалось извлечь текст ни из одного файла EPUB.');
+        return chapters;
+    }
+
     function detectFormat(filename) {
         const ext = filename.toLowerCase().split('.').pop();
         if (ext === 'fb2') return 'fb2';
         if (ext === 'txt') return 'txt';
+        if (ext === 'zip') return 'zip';
+        if (ext === 'epub') return 'epub';
         return null;
     }
 
     async function parseFile(file) {
         const format = detectFormat(file.name);
-        if (!format) throw new Error('Поддерживаются только .txt и .fb2');
-        const text = await file.text();
-        const chapters = format === 'fb2' ? parseFB2(text) : parseTXT(text);
+        if (!format) throw new Error('Поддерживаются форматы: .txt, .fb2, .epub, .zip (с .txt/.fb2 внутри)');
+
+        let chapters, actualFormat = format;
+        if (format === 'zip') {
+            const result = await parseZIPContainer(await file.arrayBuffer());
+            chapters = result.chapters;
+            actualFormat = result.format;
+        } else if (format === 'epub') {
+            chapters = await parseEPUB(await file.arrayBuffer());
+        } else {
+            const text = await file.text();
+            chapters = format === 'fb2' ? parseFB2(text) : parseTXT(text);
+        }
+
         const paragraphCount = chapters.reduce((sum, c) => sum + c.paragraphs.length, 0);
-        return { chapters, paragraphCount, format, filename: file.name };
+        return { chapters, paragraphCount, format: actualFormat, filename: file.name };
     }
 
     // ============================================================
@@ -1098,9 +1200,9 @@
 
     $('helpBtn').addEventListener('click', () => {
         openModal('Как это работает', `
-            <p style="margin-bottom:1rem;"><strong>1. Загрузите текст.</strong> Файл для чтения — обязателен, оригинал — по желанию. Форматы: .txt и .fb2.</p>
+            <p style="margin-bottom:1rem;"><strong>1. Загрузите текст.</strong> Файл для чтения — обязателен, оригинал — по желанию. Форматы: .txt, .fb2, .epub, а также .zip с .txt или .fb2 внутри.</p>
             <p style="margin-bottom:1rem;"><strong>«Читать»</strong> — открывает книгу без оригинала. <strong>LINK</strong> — открывает с оригиналом, добавляя сравнение отрывков.</p>
-            <p style="margin-bottom:1rem;"><strong>В читалке:</strong> тапните и удерживайте слово — быстрый перевод. Выделите фразу — появятся «💬 Комментарий» (разбор отрывка) и «📄 Оригинал» (если файл оригинала загружен).</p>
+            <p style="margin-bottom:1rem;"><strong>В читалке:</strong> выделите слово или фразу — появятся «🌐 Перевод», «💬 Комментарий» (разбор отрывка) и «📄 Оригинал» (если файл оригинала загружен).</p>
             <p style="margin-bottom:1rem;"><strong>Нижняя панель:</strong> размер шрифта, закладка на видимый абзац, список закладок, саммари прочитанного, чтение вслух, настройки.</p>
             <p style="margin-bottom:1rem;"><strong>☰ вверху</strong> — оглавление книги. Панели прячутся при скролле — потяните вверх или нажмите кружок в углу, чтобы вернуть.</p>
             <p><strong>API-ключ Groq</strong> нужен для ИИ-функций (саммари, комментарий, сравнение, перевод слова) — получить можно на <a href="https://console.groq.com" target="_blank" style="color:var(--accent);">console.groq.com</a>, вводится один раз в настройках.</p>
@@ -1282,7 +1384,7 @@
 
         if (!READER.apiKey) { promptForApiKey(generateSummary); return; }
 
-        openModal('Саммари', '<div class="loading">⏳ Генерация саммари... Это может занять 10–30 секунд.</div>');
+        openModal('Саммари', '<div class="loading"><div class="loading-spinner"></div>Генерация саммари... Это может занять 10–30 секунд.</div>');
 
         try {
             const coverage = (currentIdx + 1) / ALL_PARAGRAPHS.length;
@@ -1349,7 +1451,7 @@ ${text}
         if (!READER.apiKey) { promptForApiKey(); return; }
 
         selectionToolbar.classList.remove('open');
-        openModal('Комментарий', '<div class="loading">⏳ Разбираю отрывок...</div>');
+        openModal('Комментарий', '<div class="loading"><div class="loading-spinner"></div>Разбираю отрывок...</div>');
 
         try {
             const anchorEl = sel.anchorNode && sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentElement : sel.anchorNode;
@@ -1414,7 +1516,7 @@ ${contextBlock}
         if (!READER.apiKey) { promptForApiKey(); return; }
 
         selectionToolbar.classList.remove('open');
-        openModal('Сравнение с оригиналом', '<div class="loading">⏳ Поиск соответствия в оригинале...</div>');
+        openModal('Сравнение с оригиналом', '<div class="loading"><div class="loading-spinner"></div>Поиск соответствия в оригинале...</div>');
 
         try {
             const anchorEl = sel.anchorNode && sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentElement : sel.anchorNode;
@@ -1455,95 +1557,46 @@ ${contextBlock}
     });
 
     // ============================================================
-    // ТАП ПО СЛОВУ: быстрый перевод без выделения текста
+    // «Перевод»: перевод выделенного слова/отрывка (кнопка в тулбаре выделения,
+    // рядом с «Комментарий» — вместо прежнего тапа по слову)
     // ============================================================
-    const wordPopup = $('wordPopup');
-    let wordPopupTimeout = null;
-
-    function getWordAtPoint(x, y) {
-        let range;
-        if (document.caretRangeFromPoint) {
-            range = document.caretRangeFromPoint(x, y);
-        } else if (document.caretPositionFromPoint) {
-            const pos = document.caretPositionFromPoint(x, y);
-            if (!pos) return null;
-            range = document.createRange();
-            range.setStart(pos.offsetNode, pos.offset);
-        }
-        if (!range || !range.startContainer || range.startContainer.nodeType !== 3) return null;
-
-        const textNode = range.startContainer;
-        const text = textNode.data;
-        let start = range.startOffset;
-        let end = range.startOffset;
-        const isWordChar = ch => !!ch && /[\p{L}\p{M}'-]/u.test(ch);
-
-        if (!isWordChar(text[start]) && !isWordChar(text[start - 1])) return null;
-        while (start > 0 && isWordChar(text[start - 1])) start--;
-        while (end < text.length && isWordChar(text[end])) end++;
-
-        const word = text.slice(start, end).trim();
-        if (!word) return null;
-
-        const wordRange = document.createRange();
-        wordRange.setStart(textNode, start);
-        wordRange.setEnd(textNode, end);
-        return { word, rect: wordRange.getBoundingClientRect() };
-    }
-
-    function closeWordPopup() {
-        wordPopup.classList.remove('open');
-        clearTimeout(wordPopupTimeout);
-    }
-
-    function positionWordPopup(rect) {
-        const assumedWidth = 220;
-        let left = rect.left + rect.width / 2 - assumedWidth / 2;
-        left = Math.max(8, Math.min(left, window.innerWidth - assumedWidth - 8));
-        let top = rect.top - 46;
-        if (top < 8) top = rect.bottom + 8;
-        wordPopup.style.left = left + 'px';
-        wordPopup.style.top = top + 'px';
-    }
-
-    document.addEventListener('click', (e) => {
-        if (wordPopup.classList.contains('open') && !$('bookContent').contains(e.target)) closeWordPopup();
-    });
-
-    $('bookContent').addEventListener('click', async (e) => {
-        if (window.getSelection().toString().trim()) return; // это конец выделения, а не тап
-
-        const hit = getWordAtPoint(e.clientX, e.clientY);
-        if (!hit) { closeWordPopup(); return; }
+    $('selectionTranslateBtn').addEventListener('click', async () => {
+        const sel = window.getSelection();
+        const selectedText = sel.toString().trim();
+        if (!selectedText) return;
         if (!READER.apiKey) { promptForApiKey(); return; }
 
-        wordPopup.innerHTML = `<span class="wp-word">${escapeHtml(hit.word)}</span><span class="wp-arrow">→</span>…`;
-        wordPopup.classList.add('open');
-        positionWordPopup(hit.rect);
+        selectionToolbar.classList.remove('open');
+        openModal('Перевод', '<div class="loading"><div class="loading-spinner"></div>Перевожу...</div>');
 
         try {
             const originalLang = READER.hasOriginal && READER.originalChapters[0] && READER.originalChapters[0].paragraphs[0]
                 ? detectLang(READER.originalChapters[0].paragraphs[0]) : null;
-            const wordLang = detectLang(hit.word.length > 2 ? hit.word : getVisibleText());
+            const selLang = detectLang(selectedText);
             let targetLang = originalLang
                 ? (originalLang === 'ru-RU' ? 'русский' : 'английский')
-                : (wordLang === 'ru-RU' ? 'английский' : 'русский');
-            // Страховка: никогда не просим перевести слово на тот же язык, на котором оно уже есть
-            const wordLangLabel = wordLang === 'ru-RU' ? 'русский' : 'английский';
-            if (targetLang === wordLangLabel) targetLang = wordLangLabel === 'русский' ? 'английский' : 'русский';
+                : (selLang === 'ru-RU' ? 'английский' : 'русский');
+            // Страховка: никогда не просим перевести текст на тот же язык, на котором он уже есть
+            const selLangLabel = selLang === 'ru-RU' ? 'русский' : 'английский';
+            if (targetLang === selLangLabel) targetLang = selLangLabel === 'русский' ? 'английский' : 'русский';
 
             const translation = await callGroq([
-                { role: 'system', content: 'Отвечай только переводом слова, без пояснений и кавычек.' },
-                { role: 'user', content: `Переведи слово "${hit.word}" на ${targetLang} язык с учётом того, что это художественный текст. Ответь только переводом, одним словом или короткой фразой.` }
-            ], 250);
+                { role: 'system', content: 'Ты — профессиональный переводчик художественной литературы. Отвечаешь только переводом, без пояснений и кавычек.' },
+                { role: 'user', content: `Переведи следующий отрывок на ${targetLang} язык максимально близко по смыслу, сохраняя стиль художественного текста. Ответь только переводом:\n\n${selectedText}` }
+            ], 1000);
 
-            wordPopup.innerHTML = `<span class="wp-word">${escapeHtml(hit.word)}</span><span class="wp-arrow">→</span>${escapeHtml(translation)}`;
-            clearTimeout(wordPopupTimeout);
-            wordPopupTimeout = setTimeout(closeWordPopup, 4000);
+            openModal('🌐 Перевод', `
+                <div style="margin-bottom:1rem;">
+                    <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem;">Выделено:</div>
+                    <div style="background:var(--bg-soft);padding:.7rem;border-radius:8px;">${escapeHtml(selectedText)}</div>
+                </div>
+                <div>
+                    <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem;">Перевод:</div>
+                    <div style="background:var(--bg-soft);padding:.7rem;border-radius:8px;font-style:italic;">${escapeHtml(translation)}</div>
+                </div>
+            `);
         } catch (err) {
-            wordPopup.innerHTML = `<span class="wp-word">${escapeHtml(hit.word)}</span><span class="wp-arrow">→</span><span style="color:#ff6b6b;">${escapeHtml(err.message)}</span>`;
-            clearTimeout(wordPopupTimeout);
-            wordPopupTimeout = setTimeout(closeWordPopup, 4000);
+            openModal('Перевод', `<div style="color:#ff6b6b;">❌ Ошибка: ${escapeHtml(err.message)}</div>`);
         }
     });
 
