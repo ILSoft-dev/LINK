@@ -1396,7 +1396,10 @@ ${contextBlock}
             const para = anchorEl ? anchorEl.closest('p[id^="p-"]') : null;
             const chapterIdx = getChapterIndexForParagraph(para);
             const scopedOriginalText = getOriginalSearchScope(chapterIdx);
-            const targetLangHint = detectLang(scopedOriginalText) === 'ru-RU' ? 'русский' : 'английский (или язык оригинального файла)';
+            let targetLangHint = detectLang(scopedOriginalText) === 'ru-RU' ? 'русский' : 'английский';
+            // Страховка: не просим перевести выделение на тот же язык, на котором оно уже есть
+            const selectionLangLabel = detectLang(selectedText) === 'ru-RU' ? 'русский' : 'английский';
+            if (targetLangHint === selectionLangLabel) targetLangHint = selectionLangLabel === 'русский' ? 'английский' : 'русский';
 
             const translatePrompt = `Переведи следующий текст на ${targetLangHint} язык максимально близко по смыслу. Ответь только переводом, без комментариев:\n\n${selectedText}`;
             const translated = await callGroq([
@@ -1496,23 +1499,26 @@ ${contextBlock}
         try {
             const originalLang = READER.hasOriginal && READER.originalChapters[0] && READER.originalChapters[0].paragraphs[0]
                 ? detectLang(READER.originalChapters[0].paragraphs[0]) : null;
-            const bookLang = detectLang(hit.word.length > 2 ? hit.word : getVisibleText());
-            const targetLang = originalLang
+            const wordLang = detectLang(hit.word.length > 2 ? hit.word : getVisibleText());
+            let targetLang = originalLang
                 ? (originalLang === 'ru-RU' ? 'русский' : 'английский')
-                : (bookLang === 'ru-RU' ? 'английский' : 'русский');
+                : (wordLang === 'ru-RU' ? 'английский' : 'русский');
+            // Страховка: никогда не просим перевести слово на тот же язык, на котором оно уже есть
+            const wordLangLabel = wordLang === 'ru-RU' ? 'русский' : 'английский';
+            if (targetLang === wordLangLabel) targetLang = wordLangLabel === 'русский' ? 'английский' : 'русский';
 
             const translation = await callGroq([
                 { role: 'system', content: 'Отвечай только переводом слова, без пояснений и кавычек.' },
                 { role: 'user', content: `Переведи слово "${hit.word}" на ${targetLang} язык с учётом того, что это художественный текст. Ответь только переводом, одним словом или короткой фразой.` }
-            ], 60);
+            ], 250);
 
             wordPopup.innerHTML = `<span class="wp-word">${escapeHtml(hit.word)}</span><span class="wp-arrow">→</span>${escapeHtml(translation)}`;
             clearTimeout(wordPopupTimeout);
             wordPopupTimeout = setTimeout(closeWordPopup, 4000);
         } catch (err) {
-            wordPopup.innerHTML = `<span class="wp-word">${escapeHtml(hit.word)}</span><span class="wp-arrow">→</span>ошибка перевода`;
+            wordPopup.innerHTML = `<span class="wp-word">${escapeHtml(hit.word)}</span><span class="wp-arrow">→</span><span style="color:#ff6b6b;">${escapeHtml(err.message)}</span>`;
             clearTimeout(wordPopupTimeout);
-            wordPopupTimeout = setTimeout(closeWordPopup, 2500);
+            wordPopupTimeout = setTimeout(closeWordPopup, 4000);
         }
     });
 
