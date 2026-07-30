@@ -1212,7 +1212,7 @@
         `);
     }
 
-    async function callGroq(messages, maxTokens) {
+    async function callGroqOnce(messages, maxTokens) {
         const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${READER.apiKey}` },
@@ -1222,6 +1222,7 @@
                 temperature: 0.6,
                 max_tokens: maxTokens || 1500,
                 include_reasoning: false,
+                reasoning_effort: 'low', // нам не нужна глубина рассуждений — только это и снижает шанс "зависнуть в размышлениях"
             })
         });
         if (!response.ok) {
@@ -1229,9 +1230,26 @@
             throw new Error(err.error?.message || 'Ошибка API');
         }
         const data = await response.json();
-        const content = (data.choices[0].message.content || '').trim();
-        if (!content) throw new Error('Модель вернула пустой ответ. Попробуйте ещё раз.');
-        return content;
+        return (data.choices[0].message.content || '').trim();
+    }
+
+    // openai/gpt-oss-120b на Groq — известный, подтверждённый на их собственном
+    // форуме баг: модель иногда "рассуждает" и не успевает выдать финальный
+    // текст, отвечая пустотой, независимо от include_reasoning. Груq API ещё
+    // и кэширует одинаковые промпты — значит, повтор ТОГО ЖЕ текста рискует
+    // получить тот же самый битый кэш повторно. Поэтому повтор идёт с лёгким
+    // "разбивателем кэша" — невидимой меткой в системном сообщении.
+    async function callGroq(messages, maxTokens) {
+        let content = await callGroqOnce(messages, maxTokens);
+        if (content) return content;
+
+        const bustedMessages = messages.map((m, i) =>
+            i === 0 ? { ...m, content: m.content + `\n\n(intent-id: ${Date.now()})` } : m
+        );
+        content = await callGroqOnce(bustedMessages, maxTokens);
+        if (content) return content;
+
+        throw new Error('Модель дважды подряд вернула пустой ответ — это известная особенность используемой модели у провайдера (Groq, gpt-oss-120b), не связанная с этим текстом. Попробуйте ещё раз чуть позже.');
     }
 
     // Лёгкое запоминание "разового" пересказа в памяти (не в хранилище) —
