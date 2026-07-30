@@ -902,6 +902,7 @@
         // будучи зафиксирована в углу экрана, перекрывает кнопку оглавления
         $('themeToggle').classList.add('in-topbar');
         $('readerTopbar').insertBefore($('themeToggle'), $('tocToggle'));
+        $('helpBtn').style.display = 'none';
 
         lastScrollY = 0;
         setPanelsHidden(false);
