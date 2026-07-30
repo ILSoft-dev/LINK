@@ -355,10 +355,10 @@
                     <div class="dz-icon">📖</div>
                     <div class="dz-label" id="labelA">Текст для чтения</div>
                     <div class="dz-hint">Перетащите файл сюда или нажмите, чтобы выбрать</div>
-                    <div class="dz-meta">.txt · .fb2 · .epub · .zip</div>
+                    <div class="dz-meta">.txt · .fb2 · .epub · .pdf · .docx · .html · .zip</div>
                     <div class="dz-filename" id="filenameA">Файл не выбран</div>
                     <div class="dz-error" id="errorA"></div>
-                    <input type="file" id="fileA" accept=".txt,.fb2,.epub,.zip" hidden>
+                    <input type="file" id="fileA" accept=".txt,.fb2,.epub,.pdf,.docx,.html,.htm,.zip" hidden>
                 </div>
 
                 <div class="swap-row">
@@ -371,10 +371,10 @@
                     <div class="dz-icon">🔤</div>
                     <div class="dz-label" id="labelB">Оригинал <span style="opacity:.6;font-weight:400;">(необязательно)</span></div>
                     <div class="dz-hint">Для сравнения и «Комментария»</div>
-                    <div class="dz-meta">.txt · .fb2 · .epub · .zip</div>
+                    <div class="dz-meta">.txt · .fb2 · .epub · .pdf · .docx · .html · .zip</div>
                     <div class="dz-filename" id="filenameB">Файл не выбран</div>
                     <div class="dz-error" id="errorB"></div>
-                    <input type="file" id="fileB" accept=".txt,.fb2,.epub,.zip" hidden>
+                    <input type="file" id="fileB" accept=".txt,.fb2,.epub,.pdf,.docx,.html,.htm,.zip" hidden>
                 </div>
             </div>
 
@@ -664,18 +664,169 @@
         return chapters;
     }
 
+    // PDF: подключаем pdf.js только когда реально понадобился (динамический
+    // import — чтобы не грузить полтора мегабайта библиотеки тем, кто PDF
+    // не открывает). Файл — не текстовый формат, а набор нарисованных
+    // символов с координатами, поэтому абзацы и главы приходится
+    // реконструировать эвристикой: строки группируем по Y-координате,
+    // а разрыв абзаца ловим по увеличенному межстрочному промежутку.
+    // Дальше просто скармливаем получившийся текст в parseTXT — там уже
+    // есть лёгкое разбиение на главы по "Глава/Chapter/Part", не дублируем.
+    let pdfjsLoadPromise = null;
+    function loadPdfJs() {
+        if (!pdfjsLoadPromise) {
+            pdfjsLoadPromise = import('./pdf.min.mjs').then((lib) => {
+                lib.GlobalWorkerOptions.workerSrc = './pdf.worker.min.mjs';
+                return lib;
+            });
+        }
+        return pdfjsLoadPromise;
+    }
+
+    async function parsePDF(arrayBuffer) {
+        const pdfjsLib = await loadPdfJs();
+        const doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+        let fullText = '';
+        for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
+            const page = await doc.getPage(pageNum);
+            const content = await page.getTextContent();
+            if (!content.items.length) continue;
+
+            // Группируем текстовые фрагменты страницы в строки по Y (округляем,
+            // т.к. в одной визуальной строке Y слегка "дрожит" из-за кернинга),
+            // затем сортируем строки сверху вниз, а фрагменты внутри строки —
+            // слева направо.
+            const lines = new Map();
+            for (const item of content.items) {
+                const y = Math.round(item.transform[5]);
+                if (!lines.has(y)) lines.set(y, []);
+                lines.get(y).push(item);
+            }
+            const sortedYs = [...lines.keys()].sort((a, b) => b - a);
+
+            let prevY = null;
+            let lineHeights = [];
+            for (const y of sortedYs) {
+                if (prevY !== null) lineHeights.push(prevY - y);
+                prevY = y;
+            }
+            const medianGap = lineHeights.length
+                ? lineHeights.slice().sort((a, b) => a - b)[Math.floor(lineHeights.length / 2)]
+                : 14;
+
+            let pageText = '';
+            prevY = null;
+            for (const y of sortedYs) {
+                const lineText = lines.get(y)
+                    .sort((a, b) => a.transform[4] - b.transform[4])
+                    .map(i => i.str)
+                    .join('')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+                if (!lineText) continue;
+
+                // Разрыв абзаца: промежуток заметно больше обычного межстрочного
+                const isParaBreak = prevY !== null && (prevY - y) > medianGap * 1.45;
+                pageText += (isParaBreak ? '\n\n' : (pageText ? ' ' : '')) + lineText;
+                prevY = y;
+            }
+            fullText += pageText + '\n\n';
+        }
+
+        const chapters = parseTXT(fullText);
+        return chapters;
+    }
+
+    // HTML: одиночный файл, тот же принцип, что и для глав EPUB — ищем
+    // заголовки h1-h4 (каждый начинает новую "главу") и абзацы <p>.
+    // Если <p> в файле вовсе нет (текст просто лежит внутри <body> без
+    // разметки) — переиспользуем parseTXT на textContent, как есть.
+    function parseHTMLDoc(text) {
+        const dom = new DOMParser().parseFromString(text, 'text/html');
+        const body = dom.body;
+        if (!body) throw new Error('Не удалось разобрать HTML — не найден <body>.');
+
+        const chapters = [];
+        let current = { title: '', paragraphs: [] };
+        const walker = document.createTreeWalker(body, NodeFilter.SHOW_ELEMENT);
+        let node = walker.currentNode;
+        while (node) {
+            const tag = node.tagName ? node.tagName.toLowerCase() : '';
+            if (/^h[1-4]$/.test(tag)) {
+                const t = node.textContent.trim().replace(/\s+/g, ' ');
+                if (t) {
+                    if (current.paragraphs.length) chapters.push(current);
+                    current = { title: t, paragraphs: [] };
+                }
+            } else if (tag === 'p') {
+                const t = node.textContent.trim().replace(/\s+/g, ' ');
+                if (t) current.paragraphs.push(t);
+            }
+            node = walker.nextNode();
+        }
+        if (current.paragraphs.length) chapters.push(current);
+
+        if (!chapters.length) return parseTXT(body.textContent);
+        return chapters;
+    }
+
+    // DOCX: тоже ZIP (word/document.xml), поэтому библиотека уже есть — тот
+    // же JSZip, что и для .zip/.epub, без новых зависимостей. Абзацы — это
+    // <w:p>, текст внутри — конкатенация всех <w:t>, заголовок — если у
+    // абзаца стиль Heading1/Heading2/... (стандартные стили Word).
+    async function parseDOCX(arrayBuffer) {
+        const zip = await JSZip.loadAsync(arrayBuffer);
+        const docFile = zip.file('word/document.xml');
+        if (!docFile) throw new Error('Не найден word/document.xml — это точно .docx?');
+        const xml = await docFile.async('string');
+        const doc = new DOMParser().parseFromString(xml, 'application/xml');
+        if (doc.querySelector('parsererror')) throw new Error('Не удалось разобрать .docx (повреждённый XML).');
+
+        const paragraphNodes = [...doc.getElementsByTagName('w:p')];
+        if (!paragraphNodes.length) throw new Error('В документе не нашлось ни одного абзаца.');
+
+        const chapters = [];
+        let current = { title: '', paragraphs: [] };
+        for (const p of paragraphNodes) {
+            const styleEl = p.getElementsByTagName('w:pStyle')[0];
+            const styleVal = styleEl ? styleEl.getAttribute('w:val') : null;
+            const isHeading = styleVal && /^Heading/i.test(styleVal);
+
+            const text = [...p.getElementsByTagName('w:t')]
+                .map(t => t.textContent)
+                .join('')
+                .trim()
+                .replace(/\s+/g, ' ');
+            if (!text) continue;
+
+            if (isHeading) {
+                if (current.paragraphs.length) chapters.push(current);
+                current = { title: text, paragraphs: [] };
+            } else {
+                current.paragraphs.push(text);
+            }
+        }
+        if (current.paragraphs.length) chapters.push(current);
+        if (!chapters.length) throw new Error('В .docx не нашлось текстовых абзацев.');
+        return chapters;
+    }
+
     function detectFormat(filename) {
         const ext = filename.toLowerCase().split('.').pop();
         if (ext === 'fb2') return 'fb2';
         if (ext === 'txt') return 'txt';
         if (ext === 'zip') return 'zip';
         if (ext === 'epub') return 'epub';
+        if (ext === 'pdf') return 'pdf';
+        if (ext === 'html' || ext === 'htm') return 'html';
+        if (ext === 'docx') return 'docx';
         return null;
     }
 
     async function parseFile(file) {
         const format = detectFormat(file.name);
-        if (!format) throw new Error('Поддерживаются форматы: .txt, .fb2, .epub, .zip (с .txt/.fb2 внутри)');
+        if (!format) throw new Error('Поддерживаются форматы: .txt, .fb2, .epub, .pdf, .html, .docx, .zip (с .txt/.fb2 внутри)');
 
         let chapters, actualFormat = format;
         if (format === 'zip') {
@@ -684,6 +835,12 @@
             actualFormat = result.format;
         } else if (format === 'epub') {
             chapters = await parseEPUB(await file.arrayBuffer());
+        } else if (format === 'pdf') {
+            chapters = await parsePDF(await file.arrayBuffer());
+        } else if (format === 'html') {
+            chapters = parseHTMLDoc(await file.text());
+        } else if (format === 'docx') {
+            chapters = await parseDOCX(await file.arrayBuffer());
         } else {
             const text = await file.text();
             chapters = format === 'fb2' ? parseFB2(text) : parseTXT(text);
@@ -900,7 +1057,7 @@
 
         list.innerHTML = books.map(b => `
             <div class="shelf-item" data-key="${escapeHtml(b.bookKey)}">
-                <div class="icon">${b.formatA === 'fb2' ? '📗' : '📄'}</div>
+                <div class="icon">${ {fb2:'📗', pdf:'📕', docx:'📘', html:'🌐'}[b.formatA] || '📄' }</div>
                 <div class="info">
                     <div class="title">${escapeHtml(b.title)}</div>
                     <div class="meta">${b.chaptersB ? 'с оригиналом · ' : ''}${formatRelativeDate(b.lastOpened)}</div>
@@ -1200,7 +1357,7 @@
 
     $('helpBtn').addEventListener('click', () => {
         openModal('Как это работает', `
-            <p style="margin-bottom:1rem;"><strong>1. Загрузите текст.</strong> Файл для чтения — обязателен, оригинал — по желанию. Форматы: .txt, .fb2, .epub, а также .zip с .txt или .fb2 внутри.</p>
+            <p style="margin-bottom:1rem;"><strong>1. Загрузите текст.</strong> Файл для чтения — обязателен, оригинал — по желанию. Форматы: .txt, .fb2, .epub, .pdf, .docx, .html, а также .zip с .txt или .fb2 внутри.</p>
             <p style="margin-bottom:1rem;"><strong>«Читать»</strong> — открывает книгу без оригинала. <strong>LINK</strong> — открывает с оригиналом, добавляя сравнение отрывков.</p>
             <p style="margin-bottom:1rem;"><strong>В читалке:</strong> выделите слово или фразу — появятся «🌐 Перевод», «💬 Комментарий» (разбор отрывка) и «📄 Оригинал» (если файл оригинала загружен).</p>
             <p style="margin-bottom:1rem;"><strong>Нижняя панель:</strong> размер шрифта, закладка на видимый абзац, список закладок, саммари прочитанного, чтение вслух, настройки.</p>
