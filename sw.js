@@ -3,11 +3,12 @@
 // либо загружается пользователем заново; сервис-воркер отвечает только за то,
 // чтобы САМО приложение открывалось без сети.
 
-const CACHE_VERSION = 'link-shell-v1';
+const CACHE_VERSION = 'link-shell-v2';
 const APP_SHELL = [
     './',
     './index.html',
     './manifest.json',
+    './jszip.min.js',
     './icons/icon-192.png',
     './icons/icon-512.png',
     './icons/icon-maskable-512.png',
