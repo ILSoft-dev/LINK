@@ -906,7 +906,6 @@
         // будучи зафиксирована в углу экрана, перекрывает кнопку оглавления
         $('themeToggle').classList.add('in-topbar');
         $('readerTopbar').insertBefore($('themeToggle'), $('tocToggle'));
-        $('helpBtn').style.display = 'none';
 
         lastScrollY = 0;
         setPanelsHidden(false);
@@ -924,7 +923,6 @@
         // Возвращаем кнопку темы в её обычный плавающий угол на экране загрузки
         $('themeToggle').classList.remove('in-topbar');
         document.body.insertBefore($('themeToggle'), document.body.firstChild);
-        $('helpBtn').style.display = '';
         window.scrollTo(0, 0);
     });
     // На случай закрытия вкладки без нажатия "Назад"
@@ -1189,16 +1187,27 @@
         }
         return idx;
     }
+    // Индекс абзаца по ТЕКУЩЕЙ позиции скролла (а не самой дальней когда-либо
+    // достигнутой) — саммари должно отвечать на "что было до места, где я СЕЙЧАС",
+    // а не спойлерить тем, что уже видели раньше, но сейчас перечитываете сначала.
+    function getCurrentParagraphIndex() {
+        const bottom = window.scrollY + window.innerHeight;
+        let idx = -1;
+        for (let i = 0; i < ALL_PARAGRAPHS.length; i++) {
+            if (ALL_PARAGRAPHS[i].offsetTop < bottom) idx = i; else break;
+        }
+        return idx;
+    }
     function getParagraphRangeText(fromIdx, toIdx) {
         let text = ALL_PARAGRAPHS.slice(fromIdx, toIdx + 1).map(p => p.textContent.trim()).join('\n');
         if (text.length > 15000) text = text.slice(0, 15000) + '\n…(текст обрезан)';
         return text.trim();
     }
-    function renderSummaryModal(summaryText, cached) {
+    function renderSummaryModal(summaryText, isRecap) {
         openModal('📋 Саммари прочитанного', `
             <div class="summary-text">${escapeHtml(summaryText)}</div>
             <div style="margin-top:1rem;font-size:.75rem;opacity:.5;border-top:1px solid var(--border);padding-top:.5rem;">
-                ${cached ? 'Вы ещё не продвинулись дальше последнего саммари — показано оно же.' : `Объём: ${summaryText.length} символов`}
+                ${isRecap ? 'Пересказ до текущего места — общий прогресс саммари не сдвигается.' : `Объём: ${summaryText.length} символов`}
             </div>
         `);
     }
@@ -1225,19 +1234,23 @@
         return content;
     }
 
-    async function generateSummary() {
-        const furthestIdx = getFurthestParagraphIndex();
-        if (furthestIdx < 0) { openModal('Саммари', 'Прочитайте хотя бы несколько абзацев, чтобы сгенерировать саммари.'); return; }
+    // Лёгкое запоминание "разового" пересказа в памяти (не в хранилище) —
+    // чтобы повторный клик на том же самом месте не дёргал API второй раз подряд
+    let lastRecapIndex = -2;
+    let lastRecapText = '';
 
-        if (READER.cumulativeSummary && furthestIdx <= READER.summaryUpToIndex) {
-            renderSummaryModal(READER.cumulativeSummary, true);
+    async function generateSummary() {
+        const currentIdx = getCurrentParagraphIndex();
+        if (currentIdx < 0) { openModal('Саммари', 'Прочитайте хотя бы несколько абзацев, чтобы сгенерировать саммари.'); return; }
+
+        const isExtending = currentIdx > READER.summaryUpToIndex;
+
+        if (!isExtending && currentIdx === lastRecapIndex && lastRecapText) {
+            renderSummaryModal(lastRecapText, true);
             return;
         }
 
-        const fromIdx = READER.summaryUpToIndex + 1;
-        const newText = getParagraphRangeText(fromIdx, furthestIdx);
-        const hasPrevious = !!READER.cumulativeSummary;
-        if (!hasPrevious && newText.length < 100) {
+        if (!isExtending && getParagraphRangeText(0, currentIdx).length < 100) {
             openModal('Саммари', 'Прочитайте хотя бы несколько абзацев, чтобы сгенерировать саммари.');
             return;
         }
@@ -1247,11 +1260,14 @@
         openModal('Саммари', '<div class="loading">⏳ Генерация саммари... Это может занять 10–30 секунд.</div>');
 
         try {
-            const coverage = (furthestIdx + 1) / ALL_PARAGRAPHS.length;
+            const coverage = (currentIdx + 1) / ALL_PARAGRAPHS.length;
             const targetLength = Math.round(400 + coverage * 1100);
             const bookLabel = READER.bookTitle ? `«${READER.bookTitle}»` : 'загруженного текста';
 
-            const prompt = hasPrevious ? `Ты — литературный критик. Ниже — твоё прошлое саммари прочитанной части текста ${bookLabel}, и новый фрагмент, прочитанный ПОСЛЕ этого саммари.
+            let prompt;
+            if (isExtending && READER.cumulativeSummary) {
+                const newText = getParagraphRangeText(READER.summaryUpToIndex + 1, currentIdx);
+                prompt = `Ты — литературный критик. Ниже — твоё прошлое саммари прочитанной части текста ${bookLabel}, и новый фрагмент, прочитанный ПОСЛЕ этого саммари.
 
 Прошлое саммари:
 ---
@@ -1263,32 +1279,43 @@ ${READER.cumulativeSummary}
 ${newText}
 ---
 
-Напиши ОБНОВЛЁННОЕ саммари всей прочитанной части целиком на языке этого текста: сохрани ключевые события и атмосферу из прошлого саммари, добавь события из нового фрагмента, не пересказывай прошлое саммари дословно — перепиши цельным текстом заново. Объём: примерно ${targetLength} символов. Ответь только саммари, без комментариев.` : `Ты — литературный критик. Напиши краткое, содержательное саммари прочитанной части текста ${bookLabel} на языке этого текста.
+Напиши ОБНОВЛЁННОЕ саммари всей прочитанной части целиком на языке этого текста: сохрани ключевые события и атмосферу из прошлого саммари, добавь события из нового фрагмента, не пересказывай прошлое саммари дословно — перепиши цельным текстом заново. Объём: примерно ${targetLength} символов. Ответь только саммари, без комментариев.`;
+            } else {
+                // Первое саммари вообще, либо возврат назад — считаем строго с начала
+                // книги до ТЕКУЩЕГО места, никогда не затрагивая события дальше него
+                const text = getParagraphRangeText(0, currentIdx);
+                prompt = `Ты — литературный критик. Напиши краткое, содержательное саммари прочитанной части текста ${bookLabel} на языке этого текста.
 
 Опиши ключевые события, атмосферу и главную интригу. Объём: примерно ${targetLength} символов.
 
 Текст для саммари:
 ---
-${newText}
+${text}
 ---
 
 Ответь только саммари, без комментариев.`;
+            }
 
             const summary = await callGroq([
                 { role: 'system', content: 'Ты — внимательный литературный критик. Отвечай на языке предложенного текста.' },
                 { role: 'user', content: prompt }
             ], 2000);
 
-            READER.cumulativeSummary = summary;
-            READER.summaryUpToIndex = furthestIdx;
-            bookSave('cumulativeSummary', summary);
-            bookSave('summaryUpToIndex', String(furthestIdx));
+            if (isExtending) {
+                READER.cumulativeSummary = summary;
+                READER.summaryUpToIndex = currentIdx;
+                bookSave('cumulativeSummary', summary);
+                bookSave('summaryUpToIndex', String(currentIdx));
+            } else {
+                lastRecapIndex = currentIdx;
+                lastRecapText = summary;
+            }
 
             READER.summaryHistory.push({ timestamp: Date.now(), summary });
             if (READER.summaryHistory.length > 10) READER.summaryHistory.shift();
             bookSave('summaryHistory', JSON.stringify(READER.summaryHistory));
 
-            renderSummaryModal(summary, false);
+            renderSummaryModal(summary, !isExtending);
         } catch (err) {
             openModal('Саммари', `<div style="color:#ff6b6b;">❌ Ошибка: ${escapeHtml(err.message)}</div>`);
         }
