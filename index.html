@@ -920,6 +920,7 @@
         // Возвращаем кнопку темы в её обычный плавающий угол на экране загрузки
         $('themeToggle').classList.remove('in-topbar');
         document.body.insertBefore($('themeToggle'), document.body.firstChild);
+        $('helpBtn').style.display = '';
         window.scrollTo(0, 0);
     });
     // На случай закрытия вкладки без нажатия "Назад"
