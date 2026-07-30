@@ -906,6 +906,7 @@
         // будучи зафиксирована в углу экрана, перекрывает кнопку оглавления
         $('themeToggle').classList.add('in-topbar');
         $('readerTopbar').insertBefore($('themeToggle'), $('tocToggle'));
+        $('helpBtn').style.display = 'none';
 
         lastScrollY = 0;
         setPanelsHidden(false);
@@ -923,6 +924,7 @@
         // Возвращаем кнопку темы в её обычный плавающий угол на экране загрузки
         $('themeToggle').classList.remove('in-topbar');
         document.body.insertBefore($('themeToggle'), document.body.firstChild);
+        $('helpBtn').style.display = '';
         window.scrollTo(0, 0);
     });
     // На случай закрытия вкладки без нажатия "Назад"
