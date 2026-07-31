@@ -188,13 +188,20 @@
     }
     .controls::-webkit-scrollbar{ display:none; }
 
-    #panelRestoreBtn{
-        position:fixed; right:1rem; bottom:calc(1rem + env(safe-area-inset-bottom));
-        z-index:101; box-shadow:var(--shadow);
+    /* Три плавающие кнопки внизу справа: ☰ (восстановить панели), ▲, ▼ —
+       появляются вместе, когда панели скрыты при чтении. --nav-btn-gap —
+       расстояние между кнопками (сейчас равно расстоянию от ☰ до ▼,
+       и от ▼ до ▲ — одинаковое, как и просили). */
+    :root{ --nav-btn-gap: .6rem; --nav-btn-size: 42px; }
+    .floating-nav-btn{
+        position:fixed; right:1rem; z-index:101; box-shadow:var(--shadow);
         opacity:0; transform:scale(.8); pointer-events:none;
         transition:opacity .2s, transform .2s;
     }
-    #panelRestoreBtn.show{ opacity:1; transform:scale(1); pointer-events:auto; }
+    .floating-nav-btn.show{ opacity:1; transform:scale(1); pointer-events:auto; }
+    #panelRestoreBtn{ bottom:calc(1rem + env(safe-area-inset-bottom)); }
+    #scrollDownBtn{ bottom:calc(1rem + env(safe-area-inset-bottom) + var(--nav-btn-size) + var(--nav-btn-gap)); }
+    #scrollUpBtn{ bottom:calc(1rem + env(safe-area-inset-bottom) + (var(--nav-btn-size) + var(--nav-btn-gap)) * 2); }
 
     .tts-indicator{
         position:fixed; top:70px; right:1rem; z-index:95;
@@ -400,7 +407,9 @@
         </div>
         <div class="progress-track" id="progressTrack"><div class="progress-fill" id="progressBar"></div></div>
 
-        <button id="panelRestoreBtn" class="round-btn" title="Показать панели">☰</button>
+        <button id="panelRestoreBtn" class="round-btn floating-nav-btn" title="Показать панели">☰</button>
+        <button id="scrollUpBtn" class="round-btn floating-nav-btn" title="Пролистать вверх">▲</button>
+        <button id="scrollDownBtn" class="round-btn floating-nav-btn" title="Пролистать вниз">▼</button>
 
         <div class="tts-indicator" id="ttsIndicator">🔊 читаю…</div>
 
@@ -941,11 +950,21 @@
     };
     let ALL_PARAGRAPHS = [];
 
-    function bookFingerprint(parsed, filename) {
-        const str = filename + ':' + parsed.paragraphCount + ':' + parsed.chapters.length;
+    // Ключ книги строим по СОДЕРЖИМОМУ (текст всех абзацев), а не по имени
+    // файла — иначе один и тот же файл, загруженный напрямую и, скажем, внутри
+    // .zip/.epub, даёт разные ключи и дублируется на полке. Хэш дешёвый
+    // (один проход по символам, без склейки в одну гигантскую строку), плюс
+    // общее число символов — как доп. проверка от случайных коллизий.
+    function bookFingerprint(parsed) {
         let hash = 0;
-        for (let i = 0; i < str.length; i++) hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
-        return 'book_' + Math.abs(hash);
+        let totalChars = 0;
+        for (const ch of parsed.chapters) {
+            for (const p of ch.paragraphs) {
+                for (let i = 0; i < p.length; i++) hash = ((hash << 5) - hash + p.charCodeAt(i)) | 0;
+                totalChars += p.length;
+            }
+        }
+        return 'book_' + Math.abs(hash) + '_' + totalChars;
     }
 
     function bookLoad(key) { return safeStorage.getItem(READER.bookKey + ':' + key); }
@@ -1136,8 +1155,8 @@
         const parsedA = slots.A.parsed;
         if (!parsedA) return;
 
-        READER.bookKey = bookFingerprint(parsedA, slots.A.file.name);
-        READER.bookTitle = slots.A.file.name.replace(/\.(txt|fb2)$/i, '');
+        READER.bookKey = bookFingerprint(parsedA);
+        READER.bookTitle = slots.A.file.name.replace(/\.(txt|fb2|epub|pdf|docx|html?|zip)$/i, '');
         READER.hasOriginal = mode === 'link' && !!slots.B.parsed;
         READER.originalChapters = READER.hasOriginal ? slots.B.parsed.chapters : null;
 
@@ -1224,6 +1243,8 @@
         $('progressTrack').classList.toggle('hidden', hidden);
         $('bottomPanel').classList.toggle('hidden', hidden);
         $('panelRestoreBtn').classList.toggle('show', hidden);
+        $('scrollUpBtn').classList.toggle('show', hidden);
+        $('scrollDownBtn').classList.toggle('show', hidden);
     }
 
     function updatePanelVisibility(scrollTop) {
@@ -1239,6 +1260,20 @@
     }
 
     $('panelRestoreBtn').addEventListener('click', () => setPanelsHidden(false));
+
+    // ЭТО ТОТ САМЫЙ ПАРАМЕТР: сколько строк текста пролистывается за одно
+    // нажатие ▲/▼. Строка меряется по фактической высоте строки текста
+    // (line-height), так что при увеличенном размере шрифта шаг остаётся
+    // соразмерным, а не «уезжает» на другое количество текста.
+    const SCROLL_LINES = 3;
+
+    function scrollByLines(direction) {
+        const bookContent = $('bookContent');
+        const lineHeight = bookContent ? parseFloat(getComputedStyle(bookContent).lineHeight) : 28;
+        window.scrollBy({ top: lineHeight * SCROLL_LINES * direction, behavior: 'smooth' });
+    }
+    $('scrollUpBtn').addEventListener('click', () => scrollByLines(-1));
+    $('scrollDownBtn').addEventListener('click', () => scrollByLines(1));
 
     window.addEventListener('scroll', updateProgress);
     window.addEventListener('resize', updateProgress);
