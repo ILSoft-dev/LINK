@@ -199,9 +199,9 @@
         transition:opacity .2s, transform .2s;
     }
     .floating-nav-btn.show{ opacity:1; transform:scale(1); pointer-events:auto; }
-    #panelRestoreBtn{ bottom:calc(1rem + env(safe-area-inset-bottom)); }
-    #scrollDownBtn{ bottom:calc(1rem + env(safe-area-inset-bottom) + var(--nav-btn-size) + var(--nav-btn-gap)); }
-    #scrollUpBtn{ bottom:calc(1rem + env(safe-area-inset-bottom) + (var(--nav-btn-size) + var(--nav-btn-gap)) * 2); }
+    #panelRestoreBtn{ bottom:calc(var(--nav-btn-bottom) + env(safe-area-inset-bottom)); }
+    #scrollDownBtn{ bottom:calc(var(--nav-btn-bottom) + env(safe-area-inset-bottom) + var(--nav-btn-size) + var(--nav-btn-gap)); }
+    #scrollUpBtn{ bottom:calc(var(--nav-btn-bottom) + env(safe-area-inset-bottom) + (var(--nav-btn-size) + var(--nav-btn-gap)) * 2); }
 
     .tts-indicator{
         position:fixed; top:70px; right:1rem; z-index:95;
