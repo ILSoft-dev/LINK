@@ -196,7 +196,7 @@
        большим пальцем при чтении одной рукой, а не в углу у самого низа.
        --nav-btn-gap — расстояние между самими стрелками (одинаковое
        и между ☰ и ▼ было раньше, теперь эти группы независимы). */
-    :root{ --nav-btn-gap: .6rem; --nav-btn-size: 42px; --nav-btn-bottom: 2rem; --scroll-btn-boundary: calc(100vh / 3); }
+    :root{ --nav-btn-gap: 2rem; --nav-btn-size: 42px; --nav-btn-bottom: 2rem; --scroll-btn-boundary: calc(100vh / 3); }
     .floating-nav-btn{
         position:fixed; right:1rem; z-index:101; box-shadow:var(--shadow);
         opacity:0; transform:scale(.8); pointer-events:none;
@@ -1168,6 +1168,7 @@
         READER.bookmarks = JSON.parse(bookLoad('bookmarks') || '[]');
         READER.summaryHistory = JSON.parse(bookLoad('summaryHistory') || '[]');
         READER.furthestScrollBottom = parseInt(bookLoad('furthestScrollBottom')) || 0;
+        READER.lastScrollTop = parseInt(bookLoad('lastScrollTop')) || 0;
 
         renderBook(parsedA);
         ALL_PARAGRAPHS = Array.from(document.querySelectorAll('#bookContent p[id^="p-"]'));
@@ -1188,14 +1189,15 @@
 
         setPanelsHidden(false);
 
-        // Открытие книги с полки должно продолжать чтение с места, докуда
-        // дочитали, а не с начала. furthestScrollBottom — нижняя граница
-        // экрана в самой дальней точке, куда когда-либо докручивали эту
-        // книгу (раньше использовался только для % прогресса на полке —
-        // отсюда и баг: скролл всегда сбрасывался в 0 при входе в читалку).
-        const savedScrollTop = Math.max(0, READER.furthestScrollBottom - window.innerHeight);
-        window.scrollTo(0, savedScrollTop);
-        lastScrollY = savedScrollTop;
+        // Открытие книги должно продолжать чтение с места, докуда дочитали,
+        // а не с начала — восстанавливаем ПОСЛЕДНЮЮ позицию скролла
+        // (lastScrollTop), а не самую дальнюю когда-либо достигнутую
+        // (furthestScrollBottom нужна только для % на полке — если
+        // пролистать вперёд для проверки, а потом вернуться назад
+        // перечитать, "дальняя точка" перестаёт быть тем местом, где
+        // на самом деле остановились).
+        window.scrollTo(0, READER.lastScrollTop);
+        lastScrollY = READER.lastScrollTop;
         updateProgress();
         saveToShelf();
     }
@@ -1203,6 +1205,7 @@
     $('readBtn').addEventListener('click', () => enterReader('read'));
     $('linkBtn').addEventListener('click', () => enterReader('link'));
     $('backBtn').addEventListener('click', () => {
+        bookSave('lastScrollTop', Math.round(window.scrollY));
         saveToShelf();
         document.getElementById('readerView').classList.remove('active');
         document.getElementById('uploadScreen').style.display = '';
@@ -1213,11 +1216,17 @@
         window.scrollTo(0, 0);
     });
     // На случай закрытия вкладки без нажатия "Назад"
-    window.addEventListener('pagehide', () => { if ($('readerView').classList.contains('active')) saveToShelf(); });
+    window.addEventListener('pagehide', () => {
+        if ($('readerView').classList.contains('active')) {
+            bookSave('lastScrollTop', Math.round(window.scrollY));
+            saveToShelf();
+        }
+    });
 
     // ============================================================
     // ПРОГРЕСС / ГЛАВЫ
     // ============================================================
+    let lastScrollTopSaveTimer = null;
     function updateProgress() {
         const scrollTop = window.scrollY;
         const docHeight = document.documentElement.scrollHeight - window.innerHeight;
@@ -1229,6 +1238,12 @@
             READER.furthestScrollBottom = bottom;
             bookSave('furthestScrollBottom', Math.round(bottom));
         }
+        // Последнюю позицию скролла пишем не на каждое событие (их сотни при
+        // одной прокрутке), а с задержкой — раз скролл остановился на ~400мс.
+        // На всякий случай (закрытие вкладки посреди инерционного скролла)
+        // есть ещё немедленная запись в backBtn/pagehide выше.
+        clearTimeout(lastScrollTopSaveTimer);
+        lastScrollTopSaveTimer = setTimeout(() => bookSave('lastScrollTop', Math.round(scrollTop)), 400);
         updatePanelVisibility(scrollTop);
     }
     function updateChapterIndicator(scrollTop) {
