@@ -196,7 +196,7 @@
        большим пальцем при чтении одной рукой, а не в углу у самого низа.
        --nav-btn-gap — расстояние между самими стрелками (одинаковое
        и между ☰ и ▼ было раньше, теперь эти группы независимы). */
-    :root{ --nav-btn-gap: 2rem; --nav-btn-size: 42px; --nav-btn-bottom: 2rem; --scroll-btn-boundary: calc(100vh / 3); }
+    :root{ --nav-btn-gap: .6rem; --nav-btn-size: 42px; --nav-btn-bottom: 2rem; --scroll-btn-boundary: calc(100vh / 3); }
     .floating-nav-btn{
         position:fixed; right:1rem; z-index:101; box-shadow:var(--shadow);
         opacity:0; transform:scale(.8); pointer-events:none;
@@ -1238,6 +1238,8 @@
     // ===== Авто-скрытие верхней/нижней панели при скролле вниз =====
     let lastScrollY = 0;
     let panelsHidden = false;
+    let suppressAutoPanels = false;   // true во время скролла кнопками ▲▼ — чтобы они не дёргали панели
+    let suppressAutoPanelsTimer = null;
     const HIDE_THRESHOLD = 8;     // минимальное движение, чтобы не дёргалось от дрожания пальца
     const TOP_SAFE_ZONE = 40;     // у самого верха панели всегда показаны
 
@@ -1252,6 +1254,7 @@
     }
 
     function updatePanelVisibility(scrollTop) {
+        if (suppressAutoPanels) { lastScrollY = scrollTop; return; }
         const delta = scrollTop - lastScrollY;
         if (scrollTop <= TOP_SAFE_ZONE) {
             if (panelsHidden) setPanelsHidden(false);
@@ -1265,16 +1268,26 @@
 
     $('panelRestoreBtn').addEventListener('click', () => setPanelsHidden(false));
 
-    // ЭТО ТОТ САМЫЙ ПАРАМЕТР: сколько строк текста пролистывается за одно
-    // нажатие ▲/▼. Строка меряется по фактической высоте строки текста
+    // ДВА ПАРАМЕТРА: сколько строк текста пролистывается за одно нажатие
+    // ▼ и ▲ отдельно. Строка меряется по фактической высоте строки текста
     // (line-height), так что при увеличенном размере шрифта шаг остаётся
     // соразмерным, а не «уезжает» на другое количество текста.
-    const SCROLL_LINES = 12;
+    // Вверх — треть от вниз (тонкая подстройка позиции, а не перелистывание страницы).
+    const SCROLL_LINES_DOWN = 12;
+    const SCROLL_LINES_UP = Math.round(SCROLL_LINES_DOWN / 3);
 
     function scrollByLines(direction) {
         const bookContent = $('bookContent');
         const lineHeight = bookContent ? parseFloat(getComputedStyle(bookContent).lineHeight) : 28;
-        window.scrollBy({ top: lineHeight * SCROLL_LINES * direction, behavior: 'smooth' });
+        const lines = direction < 0 ? SCROLL_LINES_UP : SCROLL_LINES_DOWN;
+        // Подавляем авто-показ/скрытие панелей на время анимации скролла (~500мс —
+        // с запасом больше, чем обычно длится smooth-скролл на такое расстояние),
+        // иначе прокрутка вверх кнопкой ▲ трактуется как "палец провёл вверх" и
+        // возвращает панели, которые пользователь как раз скрыл.
+        suppressAutoPanels = true;
+        clearTimeout(suppressAutoPanelsTimer);
+        suppressAutoPanelsTimer = setTimeout(() => { suppressAutoPanels = false; }, 500);
+        window.scrollBy({ top: lineHeight * lines * direction, behavior: 'smooth' });
     }
     $('scrollUpBtn').addEventListener('click', () => scrollByLines(-1));
     $('scrollDownBtn').addEventListener('click', () => scrollByLines(1));
