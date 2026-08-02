@@ -700,29 +700,43 @@
         const pdfjsLib = await loadPdfJs();
         const doc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
+        // Допуск, в пределах которого разные Y всё ещё считаются одной и той же
+        // визуальной строкой. Раньше группировали жёстким Math.round(y) — и
+        // если у пары символов внутри ОДНОЙ строки Y отличался на доли пункта
+        // (кернинг, особенности метрик отдельных букв — обычное дело для PDF),
+        // округление раскидывало их по двум соседним "строкам". А раз разные
+        // строки склеиваются через пробел — ровно посреди слова возникал
+        // лишний пробел ("nonimmune" → "noni" + "mmune"). Кластеризация с
+        // допуском вместо точного совпадения решает это системно.
+        const LINE_Y_TOLERANCE = 2;
+
+        function clusterLines(items) {
+            const enriched = items.map(it => ({ item: it, y: it.transform[5], x: it.transform[4] }));
+            enriched.sort((a, b) => b.y - a.y); // сверху вниз
+            const lines = [];
+            for (const entry of enriched) {
+                let line = lines.find(l => Math.abs(l.y - entry.y) <= LINE_Y_TOLERANCE);
+                if (!line) { line = { y: entry.y, items: [] }; lines.push(line); }
+                line.items.push(entry);
+            }
+            lines.sort((a, b) => b.y - a.y);
+            for (const line of lines) line.items.sort((a, b) => a.x - b.x);
+            return lines;
+        }
+
         let fullText = '';
         for (let pageNum = 1; pageNum <= doc.numPages; pageNum++) {
             const page = await doc.getPage(pageNum);
             const content = await page.getTextContent();
             if (!content.items.length) continue;
 
-            // Группируем текстовые фрагменты страницы в строки по Y (округляем,
-            // т.к. в одной визуальной строке Y слегка "дрожит" из-за кернинга),
-            // затем сортируем строки сверху вниз, а фрагменты внутри строки —
-            // слева направо.
-            const lines = new Map();
-            for (const item of content.items) {
-                const y = Math.round(item.transform[5]);
-                if (!lines.has(y)) lines.set(y, []);
-                lines.get(y).push(item);
-            }
-            const sortedYs = [...lines.keys()].sort((a, b) => b - a);
+            const lines = clusterLines(content.items);
 
             let prevY = null;
             let lineHeights = [];
-            for (const y of sortedYs) {
-                if (prevY !== null) lineHeights.push(prevY - y);
-                prevY = y;
+            for (const line of lines) {
+                if (prevY !== null) lineHeights.push(prevY - line.y);
+                prevY = line.y;
             }
             const medianGap = lineHeights.length
                 ? lineHeights.slice().sort((a, b) => a - b)[Math.floor(lineHeights.length / 2)]
@@ -730,19 +744,18 @@
 
             let pageText = '';
             prevY = null;
-            for (const y of sortedYs) {
-                const lineText = lines.get(y)
-                    .sort((a, b) => a.transform[4] - b.transform[4])
-                    .map(i => i.str)
+            for (const line of lines) {
+                const lineText = line.items
+                    .map(e => e.item.str)
                     .join('')
                     .replace(/\s+/g, ' ')
                     .trim();
                 if (!lineText) continue;
 
                 // Разрыв абзаца: промежуток заметно больше обычного межстрочного
-                const isParaBreak = prevY !== null && (prevY - y) > medianGap * 1.45;
+                const isParaBreak = prevY !== null && (prevY - line.y) > medianGap * 1.45;
                 pageText += (isParaBreak ? '\n\n' : (pageText ? ' ' : '')) + lineText;
-                prevY = y;
+                prevY = line.y;
             }
             fullText += pageText + '\n\n';
         }
