@@ -760,8 +760,28 @@
             fullText += pageText + '\n\n';
         }
 
-        const chapters = parseTXT(fullText);
+        const chapters = parseTXT(repairPdfHyphenSpaces(fullText));
         return chapters;
+    }
+
+    // Некоторые PDF (особенно низкокачественные автоконвертации, как эта —
+    // с readli.net) заставляют pdf.js отдавать дефис в составном слове как
+    // ПРОБЕЛ, сдвинутый на одну букву: "non-immune" → "noni mmune",
+    // "micro-life" → "microl ife". Это не наша склейка строк — pdf.js уже
+    // отдаёт такую строку одним куском, без информации о координатах внутри
+    // неё, так что отличить "настоящий" пробел от "бывшего дефиса"
+    // универсально нельзя (для этого нужен был бы словарь языка). Ловим
+    // только самые частые приставки — низкий риск ложных срабатываний, но и
+    // не покрывает все случаи (например, случайные составные вроде
+    // "ice-buried" эта эвристика не поймает — тут нужен был бы словарь).
+    const HYPHEN_PREFIX_PATTERN = new RegExp(
+        '\\b(non|micro|macro|multi|anti|semi|pre|post|sub|super|inter|intra|trans|' +
+        'extra|hyper|hypo|mono|neo|over|poly|pseudo|ultra|under|disease|self|co)' +
+        '([a-z])[ \\u00A0]([a-z]{2,}\\b)',
+        'g'
+    );
+    function repairPdfHyphenSpaces(text) {
+        return text.replace(HYPHEN_PREFIX_PATTERN, '$1-$2$3');
     }
 
     // HTML: одиночный файл, тот же принцип, что и для глав EPUB — ищем
@@ -1812,13 +1832,50 @@ ${contextBlock}
 
     // ============================================================
     // «Перевод»: перевод выделенного слова/отрывка (кнопка в тулбаре выделения,
-    // рядом с «Комментарий» — вместо прежнего тапа по слову)
-    // ============================================================
+    // рядом с «Комментарий» — вместо прежнего тапа по слову).
+    // MyMemory — бесплатный REST API без ключа и без VPN (в отличие от
+    // Groq и, как выяснилось, googleapis.com-доменов Google, которые тоже
+    // попадают под гео-ограничения из Беларуси). Лимит — 5000 символов/день
+    // без email (при желании можно добавить &de=почта в URL — увеличит лимит
+    // в 10 раз, регистрация не нужна). Ограничение ~500 символов на ОДИН
+    // запрос — поэтому длинные выделения режем на предложения и переводим
+    // кусками, склеивая результат.
+    function chunkTextForMyMemory(text, maxLen = 450) {
+        if (text.length <= maxLen) return [text];
+        const sentences = text.match(/[^.!?]+[.!?]*\s*/g) || [text];
+        const chunks = [];
+        let current = '';
+        for (const s of sentences) {
+            if (current && (current + s).length > maxLen) { chunks.push(current); current = s; }
+            else current += s;
+        }
+        if (current) chunks.push(current);
+        return chunks;
+    }
+
+    async function translateWithMyMemory(text, sourceLangCode, targetLangCode) {
+        const chunks = chunkTextForMyMemory(text);
+        const results = [];
+        for (const chunk of chunks) {
+            const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(chunk)}&langpair=${sourceLangCode}|${targetLangCode}`;
+            const res = await fetch(url);
+            if (!res.ok) throw new Error('MyMemory недоступен (HTTP ' + res.status + ')');
+            const data = await res.json();
+            if (!data || !data.responseData || typeof data.responseData.translatedText !== 'string') {
+                throw new Error('Не удалось разобрать ответ переводчика');
+            }
+            if (data.responseData.translatedText.includes('MYMEMORY WARNING')) {
+                throw new Error('Дневной лимит бесплатных переводов исчерпан — попробуйте завтра');
+            }
+            results.push(data.responseData.translatedText);
+        }
+        return results.join(' ');
+    }
+
     $('selectionTranslateBtn').addEventListener('click', async () => {
         const sel = window.getSelection();
         const selectedText = sel.toString().trim();
         if (!selectedText) return;
-        if (!READER.apiKey) { promptForApiKey(); return; }
 
         selectionToolbar.classList.remove('open');
         openModal('Перевод', '<div class="loading"><div class="loading-spinner"></div>Перевожу...</div>');
@@ -1827,17 +1884,14 @@ ${contextBlock}
             const originalLang = READER.hasOriginal && READER.originalChapters[0] && READER.originalChapters[0].paragraphs[0]
                 ? detectLang(READER.originalChapters[0].paragraphs[0]) : null;
             const selLang = detectLang(selectedText);
+            const selLangCode = selLang === 'ru-RU' ? 'ru' : 'en';
             let targetLang = originalLang
-                ? (originalLang === 'ru-RU' ? 'русский' : 'английский')
-                : (selLang === 'ru-RU' ? 'английский' : 'русский');
+                ? (originalLang === 'ru-RU' ? 'ru' : 'en')
+                : (selLangCode === 'ru' ? 'en' : 'ru');
             // Страховка: никогда не просим перевести текст на тот же язык, на котором он уже есть
-            const selLangLabel = selLang === 'ru-RU' ? 'русский' : 'английский';
-            if (targetLang === selLangLabel) targetLang = selLangLabel === 'русский' ? 'английский' : 'русский';
+            if (targetLang === selLangCode) targetLang = selLangCode === 'ru' ? 'en' : 'ru';
 
-            const translation = await callGroq([
-                { role: 'system', content: 'Ты — профессиональный переводчик художественной литературы. Отвечаешь только переводом, без пояснений и кавычек.' },
-                { role: 'user', content: `Переведи следующий отрывок на ${targetLang} язык максимально близко по смыслу, сохраняя стиль художественного текста. Ответь только переводом:\n\n${selectedText}` }
-            ], 1000);
+            const translation = await translateWithMyMemory(selectedText, selLangCode, targetLang);
 
             openModal('🌐 Перевод', `
                 <div style="margin-bottom:1rem;">
