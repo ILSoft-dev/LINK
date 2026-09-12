@@ -582,31 +582,52 @@
         return chapters;
     }
 
-    // Извлечение .txt/.fb2 из архива .zip: ищем подходящий файл внутри,
-    // игнорируя служебные (__MACOSX, скрытые). Если найдено несколько —
-    // предпочитаем .fb2 (более структурирован), а среди равных берём самый крупный
-    // (чтобы не подхватить случайный readme.txt вместо самой книги).
+    // Извлечение книги из архива .zip: ищем подходящий файл внутри,
+    // игнорируя служебные (__MACOSX, скрытые). Внутри архива поддерживаются
+    // ВСЕ те же форматы, что и вне архива — раньше здесь искались только
+    // .fb2/.txt, из-за чего .pdf/.docx/.epub/.html в zip не распознавались
+    // вообще (хотя сами по себе, не в архиве, эти форматы уже поддерживались).
+    // Приоритет при нескольких найденных типах — более структурированные
+    // форматы вперёд; среди файлов одного типа — берём самый крупный (чтобы
+    // не подхватить случайный readme.txt вместо самой книги).
     async function parseZIPContainer(arrayBuffer) {
         const zip = await JSZip.loadAsync(arrayBuffer);
-        const candidates = Object.values(zip.files)
-            .filter(f => !f.dir && !f.name.startsWith('__MACOSX/') && !f.name.split('/').pop().startsWith('.'))
-            .filter(f => /\.(fb2|txt)$/i.test(f.name));
+        const allFiles = Object.values(zip.files)
+            .filter(f => !f.dir && !f.name.startsWith('__MACOSX/') && !f.name.split('/').pop().startsWith('.'));
 
-        if (!candidates.length) throw new Error('В архиве не нашлось файла .txt или .fb2.');
+        const PRIORITY = ['fb2', 'epub', 'docx', 'pdf', 'html', 'htm', 'txt'];
+        let chosenExt = null, pool = [];
+        for (const ext of PRIORITY) {
+            const found = allFiles.filter(f => new RegExp('\\.' + ext + '$', 'i').test(f.name));
+            if (found.length) { chosenExt = ext; pool = found; break; }
+        }
+        if (!chosenExt) throw new Error('В архиве не нашлось файла .fb2, .epub, .docx, .pdf, .html или .txt.');
 
-        const fb2s = candidates.filter(f => /\.fb2$/i.test(f.name));
-        const pool = fb2s.length ? fb2s : candidates;
-
-        let best = null;
+        let bestBytes = null;
         for (const f of pool) {
-            const text = await f.async('string');
-            if (!best || text.length > best.text.length) best = { file: f, text };
+            const bytes = await f.async('uint8array');
+            if (!bestBytes || bytes.length > bestBytes.length) bestBytes = bytes;
+        }
+        const buf = bestBytes.buffer.slice(bestBytes.byteOffset, bestBytes.byteOffset + bestBytes.byteLength);
+
+        let chapters, format;
+        if (chosenExt === 'fb2') {
+            format = 'fb2'; chapters = parseFB2(new TextDecoder('utf-8').decode(bestBytes));
+        } else if (chosenExt === 'txt') {
+            format = 'txt'; chapters = parseTXT(new TextDecoder('utf-8').decode(bestBytes));
+        } else if (chosenExt === 'html' || chosenExt === 'htm') {
+            format = 'html'; chapters = parseHTMLDoc(new TextDecoder('utf-8').decode(bestBytes));
+        } else if (chosenExt === 'epub') {
+            format = 'epub'; chapters = await parseEPUB(buf);
+        } else if (chosenExt === 'docx') {
+            format = 'docx'; chapters = await parseDOCX(buf);
+        } else { // pdf
+            format = 'pdf'; chapters = await parsePDF(buf);
         }
 
-        const format = /\.fb2$/i.test(best.file.name) ? 'fb2' : 'txt';
-        const chapters = format === 'fb2' ? parseFB2(best.text) : parseTXT(best.text);
         return { chapters, format };
     }
+
 
     // EPUB: сам по себе .zip с XHTML-файлами внутри + манифест content.opf,
     // который задаёт порядок чтения (<spine>). Здесь мы не строим отдельную
@@ -872,7 +893,7 @@
 
     async function parseFile(file) {
         const format = detectFormat(file.name);
-        if (!format) throw new Error('Поддерживаются форматы: .txt, .fb2, .epub, .pdf, .html, .docx, .zip (с .txt/.fb2 внутри)');
+        if (!format) throw new Error('Поддерживаются форматы: .txt, .fb2, .epub, .pdf, .html, .docx, .zip (с любым из этих форматов внутри)');
 
         let chapters, actualFormat = format;
         if (format === 'zip') {
@@ -1475,7 +1496,7 @@
 
     $('helpBtn').addEventListener('click', () => {
         openModal('Как это работает', `
-            <p style="margin-bottom:1rem;"><strong>1. Загрузите текст.</strong> Файл для чтения — обязателен, оригинал — по желанию. Форматы: .txt, .fb2, .epub, .pdf, .docx, .html, а также .zip с .txt или .fb2 внутри.</p>
+            <p style="margin-bottom:1rem;"><strong>1. Загрузите текст.</strong> Файл для чтения — обязателен, оригинал — по желанию. Форматы: .txt, .fb2, .epub, .pdf, .docx, .html, а также .zip с любым из этих форматов внутри.</p>
             <p style="margin-bottom:1rem;"><strong>«Читать»</strong> — открывает книгу без оригинала. <strong>LINK</strong> — открывает с оригиналом, добавляя сравнение отрывков.</p>
             <p style="margin-bottom:1rem;"><strong>В читалке:</strong> выделите слово или фразу — появятся «🌐 Перевод», «💬 Комментарий» (разбор отрывка) и «📄 Оригинал» (если файл оригинала загружен).</p>
             <p style="margin-bottom:1rem;"><strong>Нижняя панель:</strong> размер шрифта, закладка на видимый абзац, список закладок, саммари прочитанного, чтение вслух, настройки.</p>
