@@ -426,6 +426,7 @@
                 <button id="bookmarkToggle" class="round-btn" title="Добавить закладку">🔖</button>
                 <button id="bookmarksPanelToggle" class="round-btn" title="Список закладок">📚</button>
                 <button id="summaryBtn" class="round-btn" title="Саммари прочитанного">📋</button>
+                <button id="askBtn" class="round-btn" title="Вопрос по содержанию">❓</button>
                 <button id="ttsBtn" class="round-btn" title="Читать вслух">🔊</button>
                 <button id="settingsBtn" class="round-btn" title="Настройки API-ключа">⚙️</button>
             </div>
@@ -1497,7 +1498,7 @@
         openModal('Как это работает', `
             <p style="margin-bottom:1rem;"><strong>1. Загрузите текст.</strong> Файл для чтения — обязателен, оригинал — по желанию. Форматы: .txt, .fb2, .epub, .pdf, .docx, .html, а также .zip с любым из этих форматов внутри.</p>
             <p style="margin-bottom:1rem;"><strong>«Читать»</strong> — открывает книгу без оригинала. <strong>LINK</strong> — открывает с оригиналом, добавляя сравнение отрывков.</p>
-            <p style="margin-bottom:1rem;"><strong>В читалке:</strong> выделите слово или фразу — появятся «💬 Комментарий» (разбор отрывка) и «📄 Оригинал» (если файл оригинала загружен).</p>
+            <p style="margin-bottom:1rem;"><strong>В читалке:</strong> выделите слово или фразу — появятся «💬 Комментарий» (разбор отрывка) и «📄 Оригинал» (если файл оригинала загружен). Кнопка «❓» внизу — свободный вопрос по прочитанной части, без выделения текста.</p>
             <p style="margin-bottom:1rem;"><strong>Нижняя панель:</strong> размер шрифта, закладка на видимый абзац, список закладок, саммари прочитанного, чтение вслух, настройки.</p>
             <p style="margin-bottom:1rem;"><strong>☰ вверху</strong> — оглавление книги. Панели прячутся при скролле — потяните вверх или нажмите кружок в углу, чтобы вернуть.</p>
             <p><strong>API-ключ Groq</strong> нужен для ИИ-функций (саммари, комментарий, сравнение, перевод слова) — получить можно на <a href="https://console.groq.com" target="_blank" style="color:var(--accent);">console.groq.com</a>, вводится один раз в настройках.</p>
@@ -1762,6 +1763,64 @@ ${text}
         }
     }
     $('summaryBtn').addEventListener('click', generateSummary);
+
+    // «Вопрос по содержанию» — в отличие от «Комментария» (который разбирает
+    // ВЫДЕЛЕННЫЙ отрывок), это свободный вопрос без выделения текста: кто
+    // такой персонаж, что произошло, детали события и т.п. Охват текста —
+    // тот же, что и у саммари (getReadSoFarText): от начала книги до
+    // текущего места, чтобы не спойлерить то, что ещё не прочитано.
+    async function askQuestion() {
+        const currentIdx = getCurrentParagraphIndex();
+        if (currentIdx < 0) { openModal('Вопрос по содержанию', 'Прочитайте хотя бы несколько абзацев, чтобы задать вопрос.'); return; }
+        if (!READER.apiKey && !READER.openrouterApiKey) { promptForApiKey(askQuestion); return; }
+
+        openModal('❓ Вопрос по содержанию', `
+            <p style="margin-bottom:.7rem;">Спросите что-нибудь о прочитанной части — персонажи, события, детали.</p>
+            <textarea id="askQuestionInput" rows="3" style="width:100%;box-sizing:border-box;padding:.6rem;border-radius:8px;border:1px solid var(--border);background:var(--bg-soft);color:var(--text);font-family:inherit;font-size:.95rem;resize:vertical;" placeholder="Например: кто такой Норрис?"></textarea>
+            <button class="btn-primary" id="askQuestionSubmit" style="margin-top:.7rem;">Спросить</button>
+        `);
+
+        $('askQuestionInput').focus();
+        $('askQuestionSubmit').addEventListener('click', async () => {
+            const question = $('askQuestionInput').value.trim();
+            if (!question) return;
+
+            const text = getReadSoFarText(currentIdx);
+            const bookLabel = READER.bookTitle ? `«${READER.bookTitle}»` : 'загруженного текста';
+
+            openModal('❓ Вопрос по содержанию', '<div class="loading"><div class="loading-spinner"></div>Ищу ответ...</div>');
+
+            try {
+                const prompt = `Ты отвечаешь на вопрос читателя по прочитанной им части текста ${bookLabel}. Отвечай СТРОГО на основе текста ниже — если ответа там нет (например, событие ещё не произошло в прочитанной части), честно скажи об этом, не выдумывай и не забегай вперёд по сюжету. Отвечай на языке текста.
+
+Текст (прочитанная часть):
+---
+${text}
+---
+
+Вопрос читателя: ${question}`;
+
+                const answer = await callLLM([
+                    { role: 'system', content: 'Ты — внимательный собеседник по книге, отвечаешь строго по тексту и честно признаёшь, если ответа в нём нет.' },
+                    { role: 'user', content: prompt }
+                ], 1200);
+
+                openModal('❓ Вопрос по содержанию', `
+                    <div style="margin-bottom:1rem;">
+                        <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem;">Вопрос:</div>
+                        <div style="background:var(--bg-soft);padding:.7rem;border-radius:8px;">${escapeHtml(question)}</div>
+                    </div>
+                    <div>
+                        <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem;">Ответ:</div>
+                        <div style="background:var(--bg-soft);padding:.7rem;border-radius:8px;">${escapeHtml(answer)}</div>
+                    </div>
+                `);
+            } catch (err) {
+                openModal('Вопрос по содержанию', `<div style="color:#ff6b6b;">❌ Ошибка: ${escapeHtml(err.message)}</div>`);
+            }
+        });
+    }
+    $('askBtn').addEventListener('click', askQuestion);
 
     // ============================================================
     // ТУЛБАР ВЫДЕЛЕНИЯ: «Оригинал» и «Комментарий»
