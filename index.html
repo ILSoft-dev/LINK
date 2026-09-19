@@ -578,6 +578,7 @@
     <div class="selection-toolbar" id="selectionToolbar">
         <div class="st-inner">
             <button id="selectionCommentBtn">💬 Комментарий</button>
+            <button id="selectionAskBtn">❓ Вопрос</button>
             <button id="selectionOriginalBtn" style="display:none;">📄 Оригинал</button>
         </div>
     </div>
@@ -2067,14 +2068,18 @@ ${text}
     // такой персонаж, что произошло, детали события и т.п. Охват текста —
     // тот же, что и у саммари (getReadSoFarText): от начала книги до
     // текущего места, чтобы не спойлерить то, что ещё не прочитано.
-    async function askQuestion() {
+    async function askQuestion(excerpt) {
         const currentIdx = getCurrentParagraphIndex();
         if (currentIdx < 0) { openModal('Вопрос по содержанию', 'Прочитайте хотя бы несколько абзацев, чтобы задать вопрос.'); return; }
-        if (!READER.apiKey && !READER.openrouterApiKey) { promptForApiKey(askQuestion); return; }
+        if (!READER.apiKey && !READER.openrouterApiKey) { promptForApiKey(() => askQuestion(excerpt)); return; }
 
+        const excerptHint = excerpt
+            ? `<p style="margin-bottom:.7rem;color:var(--text-soft);font-size:.85rem;">К вопросу будет приложен выделенный отрывок.</p>`
+            : '';
         openModal('❓ Вопрос по содержанию', `
             <p style="margin-bottom:.7rem;">Спросите что-нибудь о прочитанной части — персонажи, события, детали.</p>
-            <textarea id="askQuestionInput" rows="3" style="width:100%;box-sizing:border-box;padding:.6rem;border-radius:8px;border:1px solid var(--border);background:var(--bg-soft);color:var(--text);font-family:inherit;font-size:.95rem;resize:vertical;" placeholder="Например: кто такой Норрис?"></textarea>
+            ${excerptHint}
+            <textarea id="askQuestionInput" rows="3" style="width:100%;box-sizing:border-box;padding:.6rem;border-radius:8px;border:1px solid var(--border);background:var(--bg-soft);color:var(--text);font-family:inherit;font-size:.95rem;resize:vertical;" placeholder="${excerpt ? 'Например: кто это?' : 'Например: кто такой Норрис?'}"></textarea>
             <button class="btn-primary" id="askQuestionSubmit" style="margin-top:.7rem;">Спросить</button>
         `);
 
@@ -2085,6 +2090,9 @@ ${text}
 
             const text = getReadSoFarText(currentIdx);
             const bookLabel = READER.bookTitle ? `«${READER.bookTitle}»` : 'загруженного текста';
+            const excerptBlock = excerpt
+                ? `\n\nЧитатель выделил этот отрывок — учти его, если вопрос с ним связан:\n"${excerpt}"\n`
+                : '';
 
             openModal('❓ Вопрос по содержанию', '<div class="loading"><div class="loading-spinner"></div>Ищу ответ...</div>');
 
@@ -2095,7 +2103,7 @@ ${text}
 ---
 ${text}
 ---
-
+${excerptBlock}
 Вопрос читателя: ${question}`;
 
                 const answer = await callLLM([
@@ -2118,7 +2126,7 @@ ${text}
             }
         });
     }
-    // (кнопка вопроса перенесена в панель «Ассистент» — см. assistantAskItem)
+    // (кнопка вопроса дублирована в тулбаре выделения — см. selectionAskBtn — и в панели «Ассистент» — см. assistantAskItem)
 
     // ============================================================
     // ТУЛБАР ВЫДЕЛЕНИЯ: «Оригинал» и «Комментарий»
@@ -2143,6 +2151,13 @@ ${text}
     });
 
     // --- «Комментарий»: контекстный разбор отрывка, без привязки ко второму файлу ---
+    $('selectionAskBtn').addEventListener('click', () => {
+        const selected = window.getSelection().toString().trim();
+        if (!selected) return;
+        selectionToolbar.classList.remove('open');
+        askQuestion(selected);
+    });
+
     $('selectionCommentBtn').addEventListener('click', async () => {
         const sel = window.getSelection();
         const selected = sel.toString().trim();
