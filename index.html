@@ -1441,6 +1441,7 @@
         if (!parsedA) return;
 
         READER.bookKey = bookFingerprint(parsedA);
+        console.log('[LINK debug] enterReader: bookKey =', READER.bookKey);
         READER.bookTitle = slots.A.file.name.replace(/\.(txt|fb2|epub|pdf|docx|html?|zip)$/i, '');
         READER.hasOriginal = mode === 'link' && !!slots.B.parsed;
         READER.originalChapters = READER.hasOriginal ? slots.B.parsed.chapters : null;
@@ -1450,6 +1451,7 @@
         READER.summaryHistory = JSON.parse(bookLoad('summaryHistory') || '[]');
         READER.furthestScrollBottom = parseInt(bookLoad('furthestScrollBottom')) || 0;
         READER.lastScrollTop = parseInt(bookLoad('lastScrollTop')) || 0;
+        console.log('[LINK debug] enterReader: raw bookLoad(lastScrollTop) =', bookLoad('lastScrollTop'), '-> READER.lastScrollTop =', READER.lastScrollTop);
 
         renderBook(parsedA);
         ALL_PARAGRAPHS = Array.from(document.querySelectorAll('#bookContent p[id^="p-"]'));
@@ -1478,6 +1480,8 @@
         // перечитать, "дальняя точка" перестаёт быть тем местом, где
         // на самом деле остановились).
         window.scrollTo(0, READER.lastScrollTop);
+        console.log('[LINK debug] scrollTo called with', READER.lastScrollTop, '-> window.scrollY right after =', window.scrollY, '; docHeight at this moment =', document.documentElement.scrollHeight);
+        setTimeout(() => console.log('[LINK debug] window.scrollY 300ms later =', window.scrollY, '; docHeight =', document.documentElement.scrollHeight), 300);
         lastScrollY = READER.lastScrollTop;
         updateProgress();
         saveToShelf();
@@ -1486,7 +1490,9 @@
     $('readBtn').addEventListener('click', () => enterReader('read'));
     $('linkBtn').addEventListener('click', () => enterReader('link'));
     $('backBtn').addEventListener('click', () => {
+        console.log('[LINK debug] backBtn: saving bookKey =', READER.bookKey, ', window.scrollY =', window.scrollY);
         bookSave('lastScrollTop', Math.round(window.scrollY));
+        console.log('[LINK debug] backBtn: readback bookLoad(lastScrollTop) right after save =', bookLoad('lastScrollTop'));
         saveToShelf();
         document.getElementById('readerView').classList.remove('active');
         document.getElementById('uploadScreen').style.display = '';

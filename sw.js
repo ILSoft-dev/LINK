@@ -3,7 +3,7 @@
 // либо загружается пользователем заново; сервис-воркер отвечает только за то,
 // чтобы САМО приложение открывалось без сети.
 
-const CACHE_VERSION = 'link-shell-v6';
+const CACHE_VERSION = 'link-shell-v7';
 const APP_SHELL = [
     './',
     './index.html',
