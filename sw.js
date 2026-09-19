@@ -3,7 +3,7 @@
 // либо загружается пользователем заново; сервис-воркер отвечает только за то,
 // чтобы САМО приложение открывалось без сети.
 
-const CACHE_VERSION = 'link-shell-v4';
+const CACHE_VERSION = 'link-shell-v5';
 const APP_SHELL = [
     './',
     './index.html',
@@ -11,9 +11,38 @@ const APP_SHELL = [
     './jszip.min.js',
     './pdf.min.mjs',
     './pdf.worker.min.mjs',
+    './fonts.css',
+    './fonts/pt-serif-latin-400-normal.woff2',
+    './fonts/pt-serif-cyrillic-400-normal.woff2',
+    './fonts/pt-serif-cyrillic-ext-400-normal.woff2',
+    './fonts/pt-serif-latin-700-normal.woff2',
+    './fonts/pt-serif-cyrillic-700-normal.woff2',
+    './fonts/pt-serif-cyrillic-ext-700-normal.woff2',
+    './fonts/pt-serif-latin-400-italic.woff2',
+    './fonts/pt-serif-cyrillic-400-italic.woff2',
+    './fonts/pt-serif-cyrillic-ext-400-italic.woff2',
+    './fonts/pt-serif-latin-700-italic.woff2',
+    './fonts/pt-serif-cyrillic-700-italic.woff2',
+    './fonts/pt-serif-cyrillic-ext-700-italic.woff2',
+    './fonts/lora-latin-600-normal.woff2',
+    './fonts/lora-cyrillic-600-normal.woff2',
+    './fonts/lora-cyrillic-ext-600-normal.woff2',
+    './fonts/lora-latin-700-normal.woff2',
+    './fonts/lora-cyrillic-700-normal.woff2',
+    './fonts/lora-cyrillic-ext-700-normal.woff2',
+    './fonts/inter-latin-400-normal.woff2',
+    './fonts/inter-cyrillic-400-normal.woff2',
+    './fonts/inter-cyrillic-ext-400-normal.woff2',
+    './fonts/inter-latin-500-normal.woff2',
+    './fonts/inter-cyrillic-500-normal.woff2',
+    './fonts/inter-cyrillic-ext-500-normal.woff2',
+    './fonts/inter-latin-600-normal.woff2',
+    './fonts/inter-cyrillic-600-normal.woff2',
+    './fonts/inter-cyrillic-ext-600-normal.woff2',
     './icons/icon-192.png',
     './icons/icon-512.png',
     './icons/icon-maskable-512.png',
+    './icons/apple-touch-icon.png',
 ];
 
 self.addEventListener('install', (event) => {

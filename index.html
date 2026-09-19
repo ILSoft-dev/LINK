@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>LINK — читайте книгу на двух языках</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7A2E2E">
@@ -11,9 +11,7 @@
 <meta name="apple-mobile-web-app-title" content="LINK">
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" href="icons/icon-192.png">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=PT+Serif:ital,wght@0,400;0,700;1,400;1,700&family=Lora:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="fonts.css">
 <style>
     :root{
         --bg:#FAF7F1;
@@ -36,6 +34,20 @@
         --accent-soft:#3A2526;
         --border:#3A352F;
         --shadow: 0 20px 60px rgba(0,0,0,0.35);
+    }
+    /* «Ink» — монохромный режим под e-ink: без цвета вообще, только градации
+       серого, как на электронных чернилах — вместо тёплого фирменного
+       бордового акцента используется тёмно-серый. */
+    body.ink{
+        --bg:#FFFFFF;
+        --bg-soft:#ECECEC;
+        --bg-card:#F7F7F7;
+        --text:#111111;
+        --text-soft:#5C5C5C;
+        --accent:#2B2B2B;
+        --accent-soft:#DEDEDE;
+        --border:#CCCCCC;
+        --shadow: 0 20px 60px rgba(0,0,0,0.12);
     }
     *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
     html,body{ margin:0; padding:0; }
@@ -167,7 +179,7 @@
     }
     body.dark .book-content{ }
     .book-content.font-scale{ }
-    .book-content p{ margin:0 0 1.15rem; text-indent:1.4rem; position:relative; }
+    .book-content p{ margin:0 0 1.15rem; text-indent:var(--p-indent, 1.4rem); position:relative; }
     .book-content h2.chapter-title{
         font-family:'Lora', serif; font-weight:700; font-size:1.35rem;
         margin:2.4rem 0 1.3rem; border-bottom:1px solid var(--border); padding-bottom:.6rem;
@@ -187,6 +199,12 @@
         overflow-x:auto; -ms-overflow-style:none; scrollbar-width:none;
     }
     .controls::-webkit-scrollbar{ display:none; }
+    /* Подписанные иконки в нижней панели: иконка + короткая подпись под ней —
+       вместо голых иконок без подписи. SVG использует stroke="currentColor",
+       поэтому автоматически монохромный, в цвет темы (не цветной эмодзи). */
+    .ctrl-wrap{ display:flex; flex-direction:column; align-items:center; gap:.2rem; }
+    .ctrl-label{ font-family:'Inter',sans-serif; font-size:.62rem; color:var(--text-soft); }
+    .icon-svg{ width:18px; height:18px; display:block; }
 
     /* Три плавающие кнопки внизу справа: ☰ (восстановить панели), ▲, ▼ —
        появляются вместе, когда панели скрыты при чтении.
@@ -229,6 +247,25 @@
         font-family:'Lora',serif; font-weight:700; font-size:1.05rem; margin-bottom:.9rem;
     }
     .close-btn{ background:none; border:none; color:var(--text-soft); font-size:1.1rem; cursor:pointer; }
+
+    /* ===== Панель «Оформление» — слайдеры ===== */
+    .type-row{ margin-bottom:1.1rem; }
+    .type-row-head{ display:flex; justify-content:space-between; align-items:baseline; font-family:'Inter',sans-serif; font-size:.82rem; margin-bottom:.4rem; }
+    .type-row-head .val{ color:var(--text-soft); font-variant-numeric:tabular-nums; }
+    .type-row input[type="range"]{ width:100%; accent-color:var(--accent); }
+
+    /* ===== Панель «Ассистент» — пункты меню ===== */
+    .ai-item{
+        display:flex; align-items:flex-start; gap:.8rem; width:100%;
+        background:none; border:none; text-align:left; cursor:pointer;
+        padding:.8rem .2rem; border-bottom:1px solid var(--border);
+        color:var(--text); font-family:inherit;
+    }
+    .ai-item:last-child{ border-bottom:none; }
+    .ai-item .icon-svg{ flex-shrink:0; margin-top:.15rem; color:var(--accent); }
+    .ai-name{ font-family:'Inter',sans-serif; font-weight:600; font-size:.92rem; }
+    .ai-desc{ font-family:'Inter',sans-serif; font-size:.76rem; color:var(--text-soft); margin-top:.15rem; }
+    .ai-key-hint{ font-family:'Inter',sans-serif; font-size:.72rem; color:var(--text-soft); text-align:center; margin-top:.8rem; opacity:.8; }
     .bookmark-item{
         display:flex; align-items:center; gap:.6rem; padding:.7rem 0;
         border-bottom:1px solid var(--border); cursor:pointer;
@@ -345,7 +382,9 @@
 </head>
 <body>
 
-    <button id="themeToggle" class="round-btn" title="Переключить тему">🌙</button>
+    <button id="themeToggle" class="round-btn" title="Переключить тему">
+        <svg class="icon-svg" id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></svg>
+    </button>
     <button id="helpBtn" class="round-btn" title="Как это работает">?</button>
 
     <!-- ============================================================
@@ -421,14 +460,36 @@
 
         <div class="bottom-panel" id="bottomPanel">
             <div class="controls">
-                <button id="fontDec" class="round-btn font-glyph" title="Уменьшить шрифт">A−</button>
-                <button id="fontInc" class="round-btn font-glyph" title="Увеличить шрифт">A+</button>
-                <button id="bookmarkToggle" class="round-btn" title="Добавить закладку">🔖</button>
-                <button id="bookmarksPanelToggle" class="round-btn" title="Список закладок">📚</button>
-                <button id="summaryBtn" class="round-btn" title="Саммари прочитанного">📋</button>
-                <button id="askBtn" class="round-btn" title="Вопрос по содержанию">❓</button>
-                <button id="ttsBtn" class="round-btn" title="Читать вслух">🔊</button>
-                <button id="settingsBtn" class="round-btn" title="Настройки API-ключа">⚙️</button>
+                <div class="ctrl-wrap">
+                    <button id="typeToggle" class="round-btn" title="Оформление">
+                        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16"/><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2"/><path d="M9 20h6"/></svg>
+                    </button>
+                    <span class="ctrl-label">Aa</span>
+                </div>
+                <div class="ctrl-wrap">
+                    <button id="bookmarkToggle" class="round-btn" title="Добавить закладку">
+                        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+                    </button>
+                    <span class="ctrl-label">Метка</span>
+                </div>
+                <div class="ctrl-wrap">
+                    <button id="bookmarksPanelToggle" class="round-btn" title="Список закладок">
+                        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path d="m9 7 2 2 4-4"/></svg>
+                    </button>
+                    <span class="ctrl-label">Список</span>
+                </div>
+                <div class="ctrl-wrap">
+                    <button id="assistantToggle" class="round-btn" title="Ассистент">
+                        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/><path d="M20 3v4"/><path d="M22 5h-4"/><path d="M4 17v2"/><path d="M5 18H3"/></svg>
+                    </button>
+                    <span class="ctrl-label">ИИ</span>
+                </div>
+                <div class="ctrl-wrap">
+                    <button id="ttsBtn" class="round-btn" title="Читать вслух">
+                        <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/></svg>
+                    </button>
+                    <span class="ctrl-label">Голос</span>
+                </div>
             </div>
         </div>
     </div>
@@ -449,6 +510,45 @@
     <div class="toc-panel" id="tocPanel">
         <div class="panel-header"><span>☰ Оглавление</span><button class="close-btn" id="tocClose">✕</button></div>
         <div id="tocList"></div>
+    </div>
+
+    <!-- ПАНЕЛЬ ОФОРМЛЕНИЯ -->
+    <div class="bookmarks-panel" id="typePanel">
+        <div class="panel-header"><span>Оформление</span><button class="close-btn" id="typeClose">✕</button></div>
+        <div class="type-row">
+            <div class="type-row-head"><span>Размер шрифта</span><span class="val" id="typeFontSizeVal">100%</span></div>
+            <input type="range" id="typeFontSize" data-fmt="x100" min="0.8" max="1.6" step="0.05">
+        </div>
+        <div class="type-row">
+            <div class="type-row-head"><span>Межстрочный интервал</span><span class="val" id="typeLineHeightVal">1.75</span></div>
+            <input type="range" id="typeLineHeight" min="1.4" max="2.2" step="0.05">
+        </div>
+        <div class="type-row">
+            <div class="type-row-head"><span>Поля страницы</span><span class="val" id="typePageMarginVal">1.30</span></div>
+            <input type="range" id="typePageMargin" min="0.8" max="2.4" step="0.1">
+        </div>
+        <div class="type-row">
+            <div class="type-row-head"><span>Абзацный отступ</span><span class="val" id="typeIndentVal">1.40</span></div>
+            <input type="range" id="typeIndent" min="0" max="2.4" step="0.1">
+        </div>
+    </div>
+
+    <!-- ПАНЕЛЬ АССИСТЕНТА -->
+    <div class="bookmarks-panel" id="assistantPanel">
+        <div class="panel-header"><span>Ассистент</span><button class="close-btn" id="assistantClose">✕</button></div>
+        <button type="button" class="ai-item" id="assistantSummaryItem">
+            <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"/><path d="M15 3v6h6"/><path d="M10 13h4"/><path d="M10 17h4"/></svg>
+            <div><div class="ai-name">Саммари</div><div class="ai-desc">Краткий пересказ прочитанного до этого места</div></div>
+        </button>
+        <button type="button" class="ai-item" id="assistantAskItem">
+            <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
+            <div><div class="ai-name">Вопрос по содержанию</div><div class="ai-desc">Спросить о персонаже, сцене, детали</div></div>
+        </button>
+        <button type="button" class="ai-item" id="assistantKeyItem">
+            <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4"/><path d="m21.5 6.5-9 9"/><circle cx="7.5" cy="15.5" r="5.5"/></svg>
+            <div><div class="ai-name">Ключ API</div><div class="ai-desc">OpenRouter (основной) или Groq (запасной)</div></div>
+        </button>
+        <div class="ai-key-hint" id="assistantKeyHint" style="display:none;">Для саммари и вопросов нужен хотя бы один ключ — добавьте его в пункте «Ключ API» выше.</div>
     </div>
 
     <!-- МОДАЛКА -->
@@ -505,29 +605,83 @@
     // ТЕМА И РАЗМЕР ШРИФТА (глобальные настройки — не привязаны к книге)
     // ============================================================
     const themeBtn = $('themeToggle');
-    function setTheme(dark) {
-        document.body.classList.toggle('dark', dark);
-        themeBtn.textContent = dark ? '☀️' : '🌙';
-        safeStorage.setItem('link_theme', dark ? 'dark' : 'light');
+    const themeIcon = $('themeIcon');
+    const THEME_ICONS = {
+        // light: показываем "луну" — намекает, куда переключит следующий клик
+        light: '<path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/>',
+        dark: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
+        ink: '<circle cx="12" cy="12" r="10"/><path d="M12 18a6 6 0 0 0 0-12v12z"/>',
+    };
+    const THEME_TITLES = { light: 'Тема: светлая (нажмите для тёмной)', dark: 'Тема: тёмная (нажмите для monochrome ink)', ink: 'Тема: monochrome ink (нажмите для светлой)' };
+    function setTheme(mode) {
+        document.body.classList.remove('dark', 'ink');
+        if (mode === 'dark' || mode === 'ink') document.body.classList.add(mode);
+        themeIcon.innerHTML = THEME_ICONS[mode];
+        themeBtn.title = THEME_TITLES[mode];
+        safeStorage.setItem('link_theme', mode);
     }
     let storedTheme = safeStorage.getItem('link_theme');
     let prefersDark = false;
     try { prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches; } catch (e) {}
-    setTheme(storedTheme ? storedTheme === 'dark' : prefersDark);
-    themeBtn.addEventListener('click', () => setTheme(!document.body.classList.contains('dark')));
+    const validThemes = ['light', 'dark', 'ink'];
+    setTheme(validThemes.includes(storedTheme) ? storedTheme : (prefersDark ? 'dark' : 'light'));
+    themeBtn.addEventListener('click', () => {
+        const current = document.body.classList.contains('dark') ? 'dark' : (document.body.classList.contains('ink') ? 'ink' : 'light');
+        const next = { light: 'dark', dark: 'ink', ink: 'light' }[current];
+        setTheme(next);
+    });
 
     let fontSize = parseFloat(safeStorage.getItem('link_fontSize')) || 1.0;
-    function applyFontSize() {
+    let lineHeight = parseFloat(safeStorage.getItem('link_lineHeight')) || 1.75;
+    let pageMargin = parseFloat(safeStorage.getItem('link_pageMargin')) || 1.3;
+    let indent = parseFloat(safeStorage.getItem('link_indent')) || 1.4;
+
+    function applyTypography() {
         const bc = $('bookContent');
-        if (bc) bc.style.fontSize = fontSize + 'rem';
+        if (!bc) return;
+        bc.style.fontSize = fontSize + 'rem';
+        bc.style.lineHeight = lineHeight;
+        bc.style.paddingLeft = pageMargin + 'rem';
+        bc.style.paddingRight = pageMargin + 'rem';
+        bc.style.setProperty('--p-indent', indent + 'rem');
     }
     function setFontSize(size) {
         fontSize = Math.min(1.6, Math.max(0.8, size));
         safeStorage.setItem('link_fontSize', fontSize);
-        applyFontSize();
+        applyTypography();
     }
-    $('fontDec').addEventListener('click', () => setFontSize(fontSize - 0.1));
-    $('fontInc').addEventListener('click', () => setFontSize(fontSize + 0.1));
+    function setLineHeight(v) {
+        lineHeight = Math.min(2.2, Math.max(1.4, v));
+        safeStorage.setItem('link_lineHeight', lineHeight);
+        applyTypography();
+    }
+    function setPageMargin(v) {
+        pageMargin = Math.min(2.4, Math.max(0.8, v));
+        safeStorage.setItem('link_pageMargin', pageMargin);
+        applyTypography();
+    }
+    function setIndent(v) {
+        indent = Math.min(2.4, Math.max(0, v));
+        safeStorage.setItem('link_indent', indent);
+        applyTypography();
+    }
+    // applyFontSize — сохранено под старым именем для прежних вызовов (вход в читалку и т.п.)
+    function applyFontSize() { applyTypography(); }
+
+    function bindTypeSlider(id, initial, onChange, valueEl) {
+        const el = $(id);
+        if (!el) return;
+        el.value = initial;
+        el.addEventListener('input', () => {
+            const v = parseFloat(el.value);
+            onChange(v);
+            if (valueEl) $(valueEl).textContent = el.dataset.fmt === 'x100' ? Math.round(v * 100) + '%' : v.toFixed(2);
+        });
+    }
+    bindTypeSlider('typeFontSize', fontSize, setFontSize, 'typeFontSizeVal');
+    bindTypeSlider('typeLineHeight', lineHeight, setLineHeight, 'typeLineHeightVal');
+    bindTypeSlider('typePageMargin', pageMargin, setPageMargin, 'typePageMarginVal');
+    bindTypeSlider('typeIndent', indent, setIndent, 'typeIndentVal');
 
     // ============================================================
     // ПАРСИНГ ФАЙЛОВ (.txt / .fb2)
@@ -682,16 +836,39 @@
             const body = dom.querySelector('body');
             if (!body) continue;
 
-            const heading = body.querySelector('h1, h2, h3');
-            const title = heading ? heading.textContent.trim().replace(/\s+/g, ' ') : '';
-
-            let paragraphs = [...body.querySelectorAll('p')]
-                .map(p => p.textContent.trim().replace(/\s+/g, ' '))
-                .filter(Boolean);
-            if (!paragraphs.length) {
-                paragraphs = body.textContent.split(/\n\s*\n/).map(s => s.trim().replace(/\s+/g, ' ')).filter(Boolean);
+            // Разбиваем КАЖДЫЙ файл спайна на подглавы по h1-h4, а не только
+            // берём первый заголовок как титул всего файла — иначе если вся
+            // книга лежит в одном XHTML-файле, получалась бы одна гигантская
+            // "глава" без оглавления, а текст внутри h1-h4 вообще терялся
+            // (раньше бралась только текстовка <p>, заголовки — нет).
+            const fileChapters = [];
+            let current = { title: '', paragraphs: [] };
+            const walker = document.createTreeWalker(body, NodeFilter.SHOW_ELEMENT);
+            let node = walker.currentNode;
+            while (node) {
+                const tag = node.tagName ? node.tagName.toLowerCase() : '';
+                if (/^h[1-4]$/.test(tag)) {
+                    const t = node.textContent.trim().replace(/\s+/g, ' ');
+                    if (t) {
+                        if (current.paragraphs.length) fileChapters.push(current);
+                        current = { title: t, paragraphs: [] };
+                    }
+                } else if (tag === 'p') {
+                    const t = node.textContent.trim().replace(/\s+/g, ' ');
+                    if (t) current.paragraphs.push(t);
+                }
+                node = walker.nextNode();
             }
-            if (paragraphs.length) chapters.push({ title, paragraphs });
+            if (current.paragraphs.length) fileChapters.push(current);
+
+            if (!fileChapters.length) {
+                // Ни <p>, ни заголовков с текстом не нашлось — редкий случай
+                // совсем неаккуратной вёрстки; берём текст файла как есть,
+                // разбивая по пустым строкам (как для .txt).
+                const fallback = body.textContent.split(/\n\s*\n/).map(s => s.trim().replace(/\s+/g, ' ')).filter(Boolean);
+                if (fallback.length) fileChapters.push({ title: '', paragraphs: fallback });
+            }
+            chapters.push(...fileChapters);
         }
 
         if (!chapters.length) throw new Error('Не удалось извлечь текст ни из одного файла EPUB.');
@@ -879,6 +1056,26 @@
         return chapters;
     }
 
+    // file.text() ВСЕГДА декодирует как UTF-8 без исключений — для файла в
+    // windows-1251 (частый случай для старых русских .txt/.fb2) это молча
+    // даёт кракозябры вместо ошибки. Читаем как байты и пробуем UTF-8 в
+    // строгом режиме (fatal:true — бросает исключение на невалидной
+    // последовательности байт, чего сам file.text() не делает); если не
+    // получилось — почти наверняка не-UTF8 текст, пробуем windows-1251
+    // (самая частая кодировка для русских текстовых файлов вне UTF-8).
+    async function decodeTextFile(file) {
+        const buf = await file.arrayBuffer();
+        try {
+            return new TextDecoder('utf-8', { fatal: true }).decode(buf);
+        } catch (e) {
+            try {
+                return new TextDecoder('windows-1251').decode(buf);
+            } catch (e2) {
+                return new TextDecoder('utf-8').decode(buf); // совсем крайний случай — как есть, с заменой битых байт
+            }
+        }
+    }
+
     function detectFormat(filename) {
         const ext = filename.toLowerCase().split('.').pop();
         if (ext === 'fb2') return 'fb2';
@@ -905,11 +1102,11 @@
         } else if (format === 'pdf') {
             chapters = await parsePDF(await file.arrayBuffer());
         } else if (format === 'html') {
-            chapters = parseHTMLDoc(await file.text());
+            chapters = parseHTMLDoc(await decodeTextFile(file));
         } else if (format === 'docx') {
             chapters = await parseDOCX(await file.arrayBuffer());
         } else {
-            const text = await file.text();
+            const text = await decodeTextFile(file);
             chapters = format === 'fb2' ? parseFB2(text) : parseTXT(text);
         }
 
@@ -1165,6 +1362,9 @@
         list.querySelectorAll('.delete-btn').forEach(btn => {
             btn.addEventListener('click', async (e) => {
                 e.stopPropagation();
+                const entry = books.find(b => b.bookKey === btn.dataset.key);
+                const label = entry ? entry.filenameA : 'эту книгу';
+                if (!confirm(`Удалить «${label}» с полки? Прогресс чтения будет потерян.`)) return;
                 await shelfDelete(btn.dataset.key);
                 renderShelf();
             });
@@ -1279,10 +1479,28 @@
         document.body.insertBefore($('themeToggle'), document.body.firstChild);
         $('helpBtn').style.display = '';
         window.scrollTo(0, 0);
+        // Иначе панель закладок/оглавления могла остаться визуально открытой
+        // поверх экрана загрузки, если её не закрыли явно перед "Назад"
+        closeBookmarksPanel();
+        closeTOC();
+        closeTypePanel();
+        closeAssistantPanel();
     });
     // На случай закрытия вкладки без нажатия "Назад"
     window.addEventListener('pagehide', () => {
         if ($('readerView').classList.contains('active')) {
+            bookSave('lastScrollTop', Math.round(window.scrollY));
+            saveToShelf();
+        }
+    });
+    // visibilitychange — более надёжный триггер конкретно на мобильных: когда
+    // читатель просто сворачивает приложение (домой, блокировка экрана,
+    // переключение на другое приложение), а не жмёт "Назад" явно, pagehide
+    // часто срабатывает поздно или не срабатывает вовсе — ОС может
+    // приостановить вкладку раньше. document.hidden ловит момент сворачивания
+    // сразу, надёжнее debounce-таймера ниже.
+    document.addEventListener('visibilitychange', () => {
+        if (document.hidden && $('readerView').classList.contains('active')) {
             bookSave('lastScrollTop', Math.round(window.scrollY));
             saveToShelf();
         }
@@ -1456,6 +1674,28 @@
     $('bookmarksClose').addEventListener('click', closeBookmarksPanel);
 
     // ============================================================
+    // ПАНЕЛЬ «ОФОРМЛЕНИЕ» и ПАНЕЛЬ «АССИСТЕНТ»
+    // ============================================================
+    function closeTypePanel() { $('typePanel').classList.remove('open'); }
+    $('typeToggle').addEventListener('click', () => {
+        $('typePanel').classList.contains('open') ? closeTypePanel() : $('typePanel').classList.add('open');
+    });
+    $('typeClose').addEventListener('click', closeTypePanel);
+
+    function closeAssistantPanel() { $('assistantPanel').classList.remove('open'); }
+    function openAssistantPanel() {
+        $('assistantKeyHint').style.display = (READER.apiKey || READER.openrouterApiKey) ? 'none' : '';
+        $('assistantPanel').classList.add('open');
+    }
+    $('assistantToggle').addEventListener('click', () => {
+        $('assistantPanel').classList.contains('open') ? closeAssistantPanel() : openAssistantPanel();
+    });
+    $('assistantClose').addEventListener('click', closeAssistantPanel);
+    $('assistantSummaryItem').addEventListener('click', () => { closeAssistantPanel(); generateSummary(); });
+    $('assistantAskItem').addEventListener('click', () => { closeAssistantPanel(); askQuestion(); });
+    $('assistantKeyItem').addEventListener('click', () => { closeAssistantPanel(); promptForApiKey(); });
+
+    // ============================================================
     // ОГЛАВЛЕНИЕ
     // ============================================================
     function renderTOC() {
@@ -1498,7 +1738,7 @@
         openModal('Как это работает', `
             <p style="margin-bottom:1rem;"><strong>1. Загрузите текст.</strong> Файл для чтения — обязателен, оригинал — по желанию. Форматы: .txt, .fb2, .epub, .pdf, .docx, .html, а также .zip с любым из этих форматов внутри.</p>
             <p style="margin-bottom:1rem;"><strong>«Читать»</strong> — открывает книгу без оригинала. <strong>LINK</strong> — открывает с оригиналом, добавляя сравнение отрывков.</p>
-            <p style="margin-bottom:1rem;"><strong>В читалке:</strong> выделите слово или фразу — появятся «💬 Комментарий» (разбор отрывка) и «📄 Оригинал» (если файл оригинала загружен). Кнопка «❓» внизу — свободный вопрос по прочитанной части, без выделения текста.</p>
+            <p style="margin-bottom:1rem;"><strong>В читалке:</strong> выделите слово или фразу — появятся «💬 Комментарий» (разбор отрывка) и «📄 Оригинал» (если файл оригинала загружен). Кнопка «ИИ» внизу — саммари, свободный вопрос по прочитанной части и настройка ключа, всё в одном месте.</p>
             <p style="margin-bottom:1rem;"><strong>Нижняя панель:</strong> размер шрифта, закладка на видимый абзац, список закладок, саммари прочитанного, чтение вслух, настройки.</p>
             <p style="margin-bottom:1rem;"><strong>☰ вверху</strong> — оглавление книги. Панели прячутся при скролле — потяните вверх или нажмите кружок в углу, чтобы вернуть.</p>
             <p><strong>API-ключ Groq</strong> нужен для ИИ-функций (саммари, комментарий, сравнение, перевод слова) — получить можно на <a href="https://console.groq.com" target="_blank" style="color:var(--accent);">console.groq.com</a>, вводится один раз в настройках.</p>
@@ -1579,7 +1819,7 @@
             }
         });
     }
-    $('settingsBtn').addEventListener('click', () => promptForApiKey());
+    // (кнопка настроек перенесена в панель «Ассистент» — см. assistantKeyItem)
 
     // ============================================================
     // САММАРИ (инкрементально, по прогрессу чтения — как в предыдущей версии)
@@ -1762,7 +2002,7 @@ ${text}
             openModal('Саммари', `<div style="color:#ff6b6b;">❌ Ошибка: ${escapeHtml(err.message)}</div>`);
         }
     }
-    $('summaryBtn').addEventListener('click', generateSummary);
+    // (кнопка саммари перенесена в панель «Ассистент» — см. assistantSummaryItem)
 
     // «Вопрос по содержанию» — в отличие от «Комментария» (который разбирает
     // ВЫДЕЛЕННЫЙ отрывок), это свободный вопрос без выделения текста: кто
@@ -1820,7 +2060,7 @@ ${text}
             }
         });
     }
-    $('askBtn').addEventListener('click', askQuestion);
+    // (кнопка вопроса перенесена в панель «Ассистент» — см. assistantAskItem)
 
     // ============================================================
     // ТУЛБАР ВЫДЕЛЕНИЯ: «Оригинал» и «Комментарий»
@@ -1850,6 +2090,9 @@ ${text}
         const selected = sel.toString().trim();
         if (!selected) return;
         if (!READER.apiKey && !READER.openrouterApiKey) { promptForApiKey(); return; }
+
+        selectionToolbar.classList.remove('open');
+        openModal('💬 Комментарий', '<div class="loading"><div class="loading-spinner"></div>Разбираю отрывок...</div>');
 
         try {
             const anchorEl = sel.anchorNode && sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentElement : sel.anchorNode;
@@ -1912,6 +2155,9 @@ ${contextBlock}
         const selectedText = sel.toString().trim();
         if (!selectedText || !READER.hasOriginal) return;
         if (!READER.apiKey && !READER.openrouterApiKey) { promptForApiKey(); return; }
+
+        selectionToolbar.classList.remove('open');
+        openModal('📄 Оригинал', '<div class="loading"><div class="loading-spinner"></div>Ищу соответствие в оригинале...</div>');
 
         try {
             const anchorEl = sel.anchorNode && sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentElement : sel.anchorNode;
