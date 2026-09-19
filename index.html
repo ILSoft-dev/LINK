@@ -14,14 +14,14 @@
 <link rel="stylesheet" href="fonts.css">
 <style>
     :root{
-        --bg:#FAF7F1;
-        --bg-soft:#F1EAE0;
-        --bg-card:#F5EFE5;
+        --bg:#F7F0E1;
+        --bg-soft:#ECDFC8;
+        --bg-card:#F1E6D0;
         --text:#2B2622;
         --text-soft:#7A6F63;
         --accent:#7A2E2E;
         --accent-soft:#F2DEDC;
-        --border:#E4DACA;
+        --border:#DBC7A5;
         --shadow: 0 20px 60px rgba(43,38,34,0.10);
     }
     body.dark{
@@ -195,7 +195,7 @@
     }
     .bottom-panel.hidden{ transform:translateY(100%); }
     .controls{
-        display:flex; gap:.5rem; align-items:center; justify-content:center;
+        display:flex; gap:.5rem; align-items:center; justify-content:space-evenly;
         overflow-x:auto; -ms-overflow-style:none; scrollbar-width:none;
     }
     .controls::-webkit-scrollbar{ display:none; }
@@ -355,6 +355,10 @@
     /* ===== Панель оглавления ===== */
     .toc-overlay{ position:fixed; inset:0; background:rgba(20,16,12,.4); z-index:129; display:none; }
     .toc-overlay.open{ display:block; }
+    /* Общая подложка для полки/закладок/оформления/ассистента — тап по
+       области чтения теперь тоже закрывает панель, не только ✕. */
+    .sheet-overlay{ position:fixed; inset:0; background:rgba(20,16,12,.4); z-index:109; display:none; }
+    .sheet-overlay.open{ display:block; }
     .toc-panel{
         position:fixed; top:0; left:0; bottom:0; z-index:130;
         width:280px; max-width:82vw;
@@ -495,6 +499,7 @@
     </div>
 
     <!-- ПАНЕЛЬ ЗАКЛАДОК -->
+        <div class="sheet-overlay" id="sheetOverlay"></div>
     <div class="bookmarks-panel" id="shelfPanel">
         <div class="panel-header"><span>📚 Моя полка</span><button class="close-btn" id="shelfClose">✕</button></div>
         <div id="shelfList"><div class="empty-msg">Пока нет сохранённых книг</div></div>
@@ -548,7 +553,17 @@
             <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4"/><path d="m21.5 6.5-9 9"/><circle cx="7.5" cy="15.5" r="5.5"/></svg>
             <div><div class="ai-name">Ключ API</div><div class="ai-desc">OpenRouter (основной) или Groq (запасной)</div></div>
         </button>
-        <div class="ai-key-hint" id="assistantKeyHint" style="display:none;">Для саммари и вопросов нужен хотя бы один ключ — добавьте его в пункте «Ключ API» выше.</div>
+        <div class="ai-key-form" id="assistantKeyForm" style="display:none;padding:.2rem .2rem 1rem;">
+            <p style="font-size:.8rem;color:var(--text-soft);margin-bottom:.8rem;">Нужен хотя бы один ключ. <b>OpenRouter</b> — основной (бесплатные модели, без карты, без VPN из Беларуси). <b>Groq</b> — запасной, идёт через relay-сервер (тоже без VPN).</p>
+            <label style="font-size:.82rem;">OpenRouter API-ключ (основной):</label>
+            <input type="password" id="openrouterKeyInput" placeholder="sk-or-v1-...">
+            <p style="font-size:.75rem;opacity:.7;margin:.3rem 0 .9rem;">Получить: <a href="https://openrouter.ai/keys" target="_blank" style="color:var(--accent);">openrouter.ai/keys</a> (email, без карты)</p>
+            <label style="font-size:.82rem;">Groq API-ключ (запасной):</label>
+            <input type="password" id="apiKeyInput" placeholder="gsk_...">
+            <p style="font-size:.75rem;opacity:.7;margin:.3rem 0 .9rem;">Получить: <a href="https://console.groq.com" target="_blank" style="color:var(--accent);">console.groq.com</a></p>
+            <button class="btn-primary" id="apiKeySaveBtn">Сохранить</button>
+        </div>
+        <div class="ai-key-hint" id="assistantKeyHint" style="display:none;">Для саммари и вопросов нужен хотя бы один ключ — откройте пункт «Ключ API» выше.</div>
     </div>
 
     <!-- МОДАЛКА -->
@@ -1394,8 +1409,8 @@
         enterReader(entry.chaptersB ? 'link' : 'read');
     }
 
-    function openShelfPanel() { renderShelf(); $('shelfPanel').classList.add('open'); }
-    function closeShelfPanel() { $('shelfPanel').classList.remove('open'); }
+    function openShelfPanel() { renderShelf(); $('shelfPanel').classList.add('open'); $('sheetOverlay').classList.add('open'); }
+    function closeShelfPanel() { $('shelfPanel').classList.remove('open'); $('sheetOverlay').classList.remove('open'); }
     $('shelfOpenBtn').addEventListener('click', openShelfPanel);
     $('shelfClose').addEventListener('click', closeShelfPanel);
     renderShelf(); // первичная отрисовка кнопки/счётчика при загрузке страницы
@@ -1665,8 +1680,8 @@
         renderBookmarks();
     }
 
-    function openBookmarksPanel() { $('bookmarksPanel').classList.add('open'); renderBookmarks(); }
-    function closeBookmarksPanel() { $('bookmarksPanel').classList.remove('open'); }
+    function openBookmarksPanel() { $('bookmarksPanel').classList.add('open'); $('sheetOverlay').classList.add('open'); renderBookmarks(); }
+    function closeBookmarksPanel() { $('bookmarksPanel').classList.remove('open'); $('sheetOverlay').classList.remove('open'); }
     $('bookmarkToggle').addEventListener('click', () => toggleBookmark());
     $('bookmarksPanelToggle').addEventListener('click', () => {
         $('bookmarksPanel').classList.contains('open') ? closeBookmarksPanel() : openBookmarksPanel();
@@ -1676,16 +1691,17 @@
     // ============================================================
     // ПАНЕЛЬ «ОФОРМЛЕНИЕ» и ПАНЕЛЬ «АССИСТЕНТ»
     // ============================================================
-    function closeTypePanel() { $('typePanel').classList.remove('open'); }
+    function closeTypePanel() { $('typePanel').classList.remove('open'); $('sheetOverlay').classList.remove('open'); }
     $('typeToggle').addEventListener('click', () => {
-        $('typePanel').classList.contains('open') ? closeTypePanel() : $('typePanel').classList.add('open');
+        if ($('typePanel').classList.contains('open')) { closeTypePanel(); return; }
+        $('typePanel').classList.add('open'); $('sheetOverlay').classList.add('open');
     });
     $('typeClose').addEventListener('click', closeTypePanel);
 
-    function closeAssistantPanel() { $('assistantPanel').classList.remove('open'); }
+    function closeAssistantPanel() { $('assistantPanel').classList.remove('open'); $('sheetOverlay').classList.remove('open'); }
     function openAssistantPanel() {
         $('assistantKeyHint').style.display = (READER.apiKey || READER.openrouterApiKey) ? 'none' : '';
-        $('assistantPanel').classList.add('open');
+        $('assistantPanel').classList.add('open'); $('sheetOverlay').classList.add('open');
     }
     $('assistantToggle').addEventListener('click', () => {
         $('assistantPanel').classList.contains('open') ? closeAssistantPanel() : openAssistantPanel();
@@ -1693,7 +1709,12 @@
     $('assistantClose').addEventListener('click', closeAssistantPanel);
     $('assistantSummaryItem').addEventListener('click', () => { closeAssistantPanel(); generateSummary(); });
     $('assistantAskItem').addEventListener('click', () => { closeAssistantPanel(); askQuestion(); });
-    $('assistantKeyItem').addEventListener('click', () => { closeAssistantPanel(); promptForApiKey(); });
+    $('assistantKeyItem').addEventListener('click', () => toggleAssistantKeyForm());
+
+    // Тап по подложке закрывает ту из четырёх панелей, что сейчас открыта
+    $('sheetOverlay').addEventListener('click', () => {
+        closeShelfPanel(); closeBookmarksPanel(); closeTypePanel(); closeAssistantPanel();
+    });
 
     // ============================================================
     // ОГЛАВЛЕНИЕ
@@ -1738,7 +1759,8 @@
         openModal('Как это работает', `
             <p style="margin-bottom:1rem;"><strong>1. Загрузите текст.</strong> Файл для чтения — обязателен, оригинал — по желанию. Форматы: .txt, .fb2, .epub, .pdf, .docx, .html, а также .zip с любым из этих форматов внутри.</p>
             <p style="margin-bottom:1rem;"><strong>«Читать»</strong> — открывает книгу без оригинала. <strong>LINK</strong> — открывает с оригиналом, добавляя сравнение отрывков.</p>
-            <p style="margin-bottom:1rem;"><strong>В читалке:</strong> выделите слово или фразу — появятся «💬 Комментарий» (разбор отрывка) и «📄 Оригинал» (если файл оригинала загружен). Кнопка «ИИ» внизу — саммари, свободный вопрос по прочитанной части и настройка ключа, всё в одном месте.</p>
+            <p style="margin-bottom:1rem;"><strong>В читалке:</strong> выделите слово или фразу — появятся «💬 Комментарий» (разбор отрывка) и «📄 Оригинал» (если файл оригинала загружен). Кнопка «ИИ» внизу — саммари, свободный вопрос по прочитанной части и ввод ключа, всё в одном месте.</p>
+            <p style="margin-bottom:1rem;">Любую выезжающую панель (полка, закладки, оформление, ИИ) можно закрыть не только крестиком, но и тапом по области чтения рядом.</p>
             <p style="margin-bottom:1rem;"><strong>Нижняя панель:</strong> размер шрифта, закладка на видимый абзац, список закладок, саммари прочитанного, чтение вслух, настройки.</p>
             <p style="margin-bottom:1rem;"><strong>☰ вверху</strong> — оглавление книги. Панели прячутся при скролле — потяните вверх или нажмите кружок в углу, чтобы вернуть.</p>
             <p><strong>API-ключ Groq</strong> нужен для ИИ-функций (саммари, комментарий, сравнение, перевод слова) — получить можно на <a href="https://console.groq.com" target="_blank" style="color:var(--accent);">console.groq.com</a>, вводится один раз в настройках.</p>
@@ -1791,35 +1813,37 @@
     // ============================================================
     // НАСТРОЙКИ (API-ключ Groq)
     // ============================================================
-    function promptForApiKey(onSaved) {
-        openModal('Настройки API', `
-            <p>Для ИИ-функций нужен хотя бы один ключ. <b>OpenRouter</b> — основной (бесплатные модели, без карты, без VPN из Беларуси). <b>Groq</b> — запасной вариант, если OpenRouter недоступен или лимит исчерпан (идёт через relay-сервер — тоже без VPN).</p>
-            <div style="margin-top:1rem;">
-                <label>OpenRouter API-ключ (основной):</label>
-                <input type="password" id="openrouterKeyInput" placeholder="sk-or-v1-..." value="${READER.openrouterApiKey || ''}">
-                <p style="font-size:.8rem;opacity:.7;margin-top:.3rem;">Получить: <a href="https://openrouter.ai/keys" target="_blank" style="color:var(--accent);">openrouter.ai/keys</a> (email, без карты)</p>
-            </div>
-            <div style="margin-top:1rem;">
-                <label>Groq API-ключ (запасной):</label>
-                <input type="password" id="apiKeyInput" placeholder="gsk_..." value="${READER.apiKey || ''}">
-                <p style="font-size:.8rem;opacity:.7;margin-top:.3rem;">Получить: <a href="https://console.groq.com" target="_blank" style="color:var(--accent);">console.groq.com</a></p>
-            </div>
-            <button class="btn-primary" id="apiKeySaveBtn" style="margin-top:1rem;">Сохранить</button>
-        `);
-        $('apiKeySaveBtn').addEventListener('click', () => {
-            const orVal = $('openrouterKeyInput').value.trim();
-            const groqVal = $('apiKeyInput').value.trim();
-            READER.openrouterApiKey = orVal;
-            safeStorage.setItem('link_openrouterApiKey', orVal);
-            READER.apiKey = groqVal;
-            safeStorage.setItem('link_apiKey', groqVal);
-            if (orVal || groqVal) {
-                closeModal();
-                if (onSaved) onSaved();
-            }
-        });
+    let apiKeySavedCallback = null;
+    function toggleAssistantKeyForm(forceOpen) {
+        const form = $('assistantKeyForm');
+        const willOpen = forceOpen || form.style.display === 'none';
+        form.style.display = willOpen ? '' : 'none';
+        if (willOpen) {
+            $('openrouterKeyInput').value = READER.openrouterApiKey || '';
+            $('apiKeyInput').value = READER.apiKey || '';
+        }
     }
-    // (кнопка настроек перенесена в панель «Ассистент» — см. assistantKeyItem)
+    $('apiKeySaveBtn').addEventListener('click', () => {
+        const orVal = $('openrouterKeyInput').value.trim();
+        const groqVal = $('apiKeyInput').value.trim();
+        READER.openrouterApiKey = orVal;
+        safeStorage.setItem('link_openrouterApiKey', orVal);
+        READER.apiKey = groqVal;
+        safeStorage.setItem('link_apiKey', groqVal);
+        if (orVal || groqVal) {
+            toggleAssistantKeyForm(false);
+            $('assistantKeyHint').style.display = 'none';
+            closeAssistantPanel();
+            if (apiKeySavedCallback) { const cb = apiKeySavedCallback; apiKeySavedCallback = null; cb(); }
+        }
+    });
+    // Раньше открывал отдельную модалку «Настройки API» — теперь ключ вводится
+    // прямо в панели «Ассистент» (ИИ), без ухода на отдельный экран.
+    function promptForApiKey(onSaved) {
+        apiKeySavedCallback = onSaved || null;
+        openAssistantPanel();
+        toggleAssistantKeyForm(true);
+    }
 
     // ============================================================
     // САММАРИ (инкрементально, по прогрессу чтения — как в предыдущей версии)
