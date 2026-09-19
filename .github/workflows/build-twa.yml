@@ -30,7 +30,15 @@ jobs:
         run: npm install -g @bubblewrap/cli
 
       - name: Point Bubblewrap to JDK/SDK
-        run: bubblewrap updateConfig --jdkPath="$JAVA_HOME" --androidSdkPath="$ANDROID_HOME"
+        run: |
+          mkdir -p "$HOME/.bubblewrap"
+          cat > "$HOME/.bubblewrap/config.json" <<EOF
+          {
+            "jdkPath": "$JAVA_HOME",
+            "androidSdkPath": "$ANDROID_HOME"
+          }
+          EOF
+          cat "$HOME/.bubblewrap/config.json"
 
       - name: Generate debug signing keystore
         working-directory: android
