@@ -1881,6 +1881,17 @@
         const tailSize = LIMIT - headSize;
         return full.slice(0, headSize) + '\n\n…(пропущена середина — книга длинная)…\n\n' + full.slice(-tailSize);
     }
+    // Текст МЕЖДУ двумя точками чтения (не от начала книги) — для дозаписи
+    // саммари: пересылать модели нужно только новый кусок, а не весь
+    // растущий read-so-far заново.
+    function getParagraphRangeText(fromIdx, toIdx) {
+        const full = ALL_PARAGRAPHS.slice(fromIdx, toIdx + 1).map(p => p.textContent.trim()).join('\n').trim();
+        const LIMIT = 12000;
+        if (full.length <= LIMIT) return full;
+        const headSize = 3000;
+        const tailSize = LIMIT - headSize;
+        return full.slice(0, headSize) + '\n\n…(пропущена середина куска)…\n\n' + full.slice(-tailSize);
+    }
     function renderSummaryModal(summaryText) {
         openModal('📋 Саммари прочитанного', `
             <div class="summary-text">${escapeHtml(summaryText)}</div>
@@ -1983,8 +1994,16 @@
             return;
         }
 
-        const text = getReadSoFarText(currentIdx);
-        if (text.length < 100) {
+        // Первое саммари за сессию — пересказываем всё прочитанное с нуля.
+        // Повторное (докуда дочитали с прошлого раза) — НЕ пересказываем
+        // растущий текст заново (там всегда одно и то же начало книги при
+        // обрезке для длинных текстов — старое саммари получалось бы почти
+        // тем же самым плюс довесок новых предложений). Вместо этого отдаём
+        // модели старое саммари + только новый прочитанный кусок и просим
+        // переписать ОДНИМ цельным текстом, своими словами.
+        const hasPrevious = !!lastSummaryText && lastSummaryIndex >= 0 && lastSummaryIndex < currentIdx;
+        const text = hasPrevious ? getParagraphRangeText(lastSummaryIndex + 1, currentIdx) : getReadSoFarText(currentIdx);
+        if (!hasPrevious && text.length < 100) {
             openModal('Саммари', 'Прочитайте хотя бы несколько абзацев, чтобы сгенерировать саммари.');
             return;
         }
@@ -1998,7 +2017,21 @@
             const targetLength = Math.round(400 + coverage * 1100);
             const bookLabel = READER.bookTitle ? `«${READER.bookTitle}»` : 'загруженного текста';
 
-            const prompt = `Ты — литературный критик. Напиши краткое, содержательное саммари прочитанной части текста ${bookLabel} на языке этого текста.
+            let prompt;
+            if (hasPrevious) {
+                prompt = `Вот саммари ранее прочитанной части текста ${bookLabel}, которое ты же составил(а) раньше:
+---
+${lastSummaryText}
+---
+
+С тех пор было прочитано продолжение:
+---
+${text}
+---
+
+Перепиши ОБЪЕДИНЁННОЕ саммари заново — цельный, слитный пересказ и старой, и новой части вместе, своими словами. Это НЕ должно читаться как старое саммари с добавленными в конец новыми предложениями — перескажи заново, переформулируй, не копируй фразы из старого саммари дословно. Опиши ключевые события, атмосферу и главную интригу на данный момент. Объём: примерно ${targetLength} символов. Ответь только саммари, без комментариев.`;
+            } else {
+                prompt = `Ты — литературный критик. Напиши краткое, содержательное саммари прочитанной части текста ${bookLabel} на языке этого текста.
 
 Опиши ключевые события, атмосферу и главную интригу. Объём: примерно ${targetLength} символов.
 
@@ -2008,6 +2041,7 @@ ${text}
 ---
 
 Ответь только саммари, без комментариев.`;
+            }
 
             const summary = await callLLM([
                 { role: 'system', content: 'Ты — внимательный литературный критик. Отвечай на языке предложенного текста.' },
