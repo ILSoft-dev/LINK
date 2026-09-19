@@ -1,0 +1,38 @@
+{
+  "packageId": "dev.ilsoft.link",
+  "host": "ilsoft-dev.github.io",
+  "name": "LINK — читайте книгу на двух языках",
+  "launcherName": "LINK",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "themeColor": "#7A2E2E",
+  "themeColorDark": "#7A2E2E",
+  "navigationColor": "#7A2E2E",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#000000",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#FAF7F1",
+  "startUrl": "/LINK/index.html",
+  "iconUrl": "https://ilsoft-dev.github.io/LINK/icons/icon-512.png",
+  "maskableIconUrl": "https://ilsoft-dev.github.io/LINK/icons/icon-maskable-512.png",
+  "webManifestUrl": "https://ilsoft-dev.github.io/LINK/manifest.json",
+  "fallbackType": "customtabs",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "androiddebugkey"
+  },
+  "appVersion": "1.0.0",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "enableNotifications": false,
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "minSdkVersion": 23,
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  }
+}

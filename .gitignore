@@ -1,0 +1,4 @@
+# Bubblewrap TWA — генерируемый Android-проект не хранится в репозитории,
+# только конфиг twa-manifest.json
+android/*
+!android/twa-manifest.json
