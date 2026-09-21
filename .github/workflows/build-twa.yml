@@ -24,14 +24,19 @@ jobs:
       # Bubblewrap 1.25 проверяет SDK так: в корне пути должна лежать папка `bin`
       # (или `tools`) с sdkmanager. У предустановленного на раннере SDK её нет —
       # там только cmdline-tools/latest/bin, отсюда ошибка "The provided androidSdk
-      # isn't correct". Собираем отдельный SDK нужной раскладки в домашней папке.
+      # isn't correct". Собираем отдельный SDK: cmdline-tools копируем и в корень
+      # (для Bubblewrap), и в cmdline-tools/latest (для Gradle/AGP, которому нужен
+      # sdkmanager внутри SDK). Пакеты под шаблон Bubblewrap 1.25 (compileSdk 36,
+      # AGP 8.9.1 -> build-tools 35.0.0) ставим заранее, чтобы Gradle ничего не докачивал.
       - name: Prepare Android SDK for Bubblewrap
         run: |
           SDK="$HOME/android-sdk"
-          mkdir -p "$SDK"
+          mkdir -p "$SDK/cmdline-tools"
+          cp -r "$ANDROID_HOME/cmdline-tools/latest" "$SDK/cmdline-tools/latest"
           cp -r "$ANDROID_HOME/cmdline-tools/latest/." "$SDK/"
-          ls "$SDK"
-          yes | "$SDK/bin/sdkmanager" --licenses --sdk_root="$SDK" > /dev/null
+          SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses --sdk_root="$SDK" > /dev/null
+          "$SDKMANAGER" --sdk_root="$SDK" "platform-tools" "platforms;android-36" "build-tools;35.0.0" "build-tools;36.1.0"
           echo "ANDROID_SDK_FOR_BW=$SDK" >> "$GITHUB_ENV"
 
       - name: Install Bubblewrap CLI
