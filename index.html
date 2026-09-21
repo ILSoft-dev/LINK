@@ -3,7 +3,24 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>LINK — читайте книгу на двух языках</title>
+<title>LINK — читалка книг, оригинал по желанию</title>
+<meta name="description" content="Читалка книг (FB2, EPUB, PDF, DOCX, TXT) с ИИ-помощником. Загрузите оригинал — и ИИ найдёт в нём место, соответствующее выделенному отрывку.">
+<link rel="canonical" href="https://ilsoft-dev.github.io/LINK/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="LINK">
+<meta property="og:locale" content="ru_RU">
+<meta property="og:url" content="https://ilsoft-dev.github.io/LINK/">
+<meta property="og:title" content="LINK — читалка книг, оригинал по желанию">
+<meta property="og:description" content="Читалка книг с ИИ-помощником. Загрузите оригинал — и ИИ найдёт в нём место, соответствующее выделенному отрывку.">
+<meta property="og:image" content="https://ilsoft-dev.github.io/LINK/og-image.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="LINK — читалка книг: перевод и оригинал рядом, сверка по выделенному отрывку">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="LINK — читалка книг, оригинал по желанию">
+<meta name="twitter:description" content="Читалка книг с ИИ-помощником. Загрузите оригинал — и ИИ найдёт в нём место, соответствующее выделенному отрывку.">
+<meta name="twitter:image" content="https://ilsoft-dev.github.io/LINK/og-image.png">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7A2E2E">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -95,7 +112,9 @@
     .tagline{
         font-family:'Inter', sans-serif; font-size:.72rem; letter-spacing:.22em;
         text-transform:uppercase; color:var(--text-soft); margin:.7rem 0 0;
+        text-wrap:balance;
     }
+    @media (max-width:340px){ .tagline{ letter-spacing:.12em; } }
     .card{
         width:100%; max-width:460px; background:var(--bg-card);
         border:1px solid var(--border); border-radius:20px;
@@ -409,7 +428,7 @@
     <div id="uploadScreen">
         <header>
             <h1 class="brand">LINK</h1>
-            <p class="tagline">Читайте книгу на двух языках одновременно</p>
+            <p class="tagline">Читалка. Оригинал — по желанию</p>
             <div id="shelfLinkWrap" style="display:none;margin-top:1rem;">
                 <button id="shelfOpenBtn" class="cta-btn secondary" style="width:auto;display:inline-block;padding:.6rem 1.3rem;">📚 Моя полка <span id="shelfCount"></span></button>
             </div>
@@ -429,14 +448,14 @@
 
                 <div class="swap-row">
                     <div class="line"></div>
-                    <button class="round-btn swap-btn" id="swapBtn" title="Поменять языки местами" aria-label="Поменять языки местами">⇄</button>
+                    <button class="round-btn swap-btn" id="swapBtn" title="Поменять файлы местами" aria-label="Поменять файлы местами">⇄</button>
                     <div class="line"></div>
                 </div>
 
                 <div class="dropzone" id="zoneB" tabindex="0" role="button" aria-label="Загрузить оригинал для сравнения (необязательно)">
                     <div class="dz-icon">🔤</div>
                     <div class="dz-label" id="labelB">Оригинал <span style="opacity:.6;font-weight:400;">(необязательно)</span></div>
-                    <div class="dz-hint">Для сравнения и «Комментария»</div>
+                    <div class="dz-hint">Сверка выделенного места с исходником</div>
                     <div class="dz-meta">.txt · .fb2 · .epub · .pdf · .docx · .html · .zip</div>
                     <div class="dz-filename" id="filenameB">Файл не выбран</div>
                     <div class="dz-error" id="errorB"></div>
@@ -452,7 +471,7 @@
             <div class="status" id="status"></div>
         </main>
 
-        <footer>LINK — читать книгу на двух языках сразу</footer>
+        <footer>LINK — читалка с ИИ-помощником · файлы остаются на вашем устройстве</footer>
     </div>
 
     <!-- ============================================================
