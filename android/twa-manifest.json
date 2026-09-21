@@ -1,7 +1,7 @@
 {
   "packageId": "dev.ilsoft.link",
   "host": "ilsoft-dev.github.io",
-  "name": "LINK — читайте книгу на двух языках",
+  "name": "LINK — читалка книг со сверкой перевода",
   "launcherName": "LINK",
   "display": "standalone",
   "orientation": "portrait-primary",
