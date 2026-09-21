@@ -38,6 +38,11 @@ jobs:
           yes | "$SDKMANAGER" --licenses --sdk_root="$SDK" > /dev/null
           "$SDKMANAGER" --sdk_root="$SDK" "platform-tools" "platforms;android-36" "build-tools;35.0.0" "build-tools;36.1.0"
           echo "ANDROID_SDK_FOR_BW=$SDK" >> "$GITHUB_ENV"
+          # У раннера уже задан ANDROID_SDK_ROOT на его собственный SDK; Bubblewrap
+          # выставляет ANDROID_HOME на наш. Gradle падает, если пути различаются,
+          # поэтому переопределяем и ANDROID_SDK_ROOT на наш SDK.
+          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
 
       - name: Install Bubblewrap CLI
         run: npm install -g @bubblewrap/cli@1.25.0
