@@ -21,13 +21,21 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Accept Android SDK licenses (preinstalled on runner)
+      # Bubblewrap 1.25 проверяет SDK так: в корне пути должна лежать папка `bin`
+      # (или `tools`) с sdkmanager. У предустановленного на раннере SDK её нет —
+      # там только cmdline-tools/latest/bin, отсюда ошибка "The provided androidSdk
+      # isn't correct". Собираем отдельный SDK нужной раскладки в домашней папке.
+      - name: Prepare Android SDK for Bubblewrap
         run: |
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          SDK="$HOME/android-sdk"
+          mkdir -p "$SDK"
+          cp -r "$ANDROID_HOME/cmdline-tools/latest/." "$SDK/"
+          ls "$SDK"
+          yes | "$SDK/bin/sdkmanager" --licenses --sdk_root="$SDK" > /dev/null
+          echo "ANDROID_SDK_FOR_BW=$SDK" >> "$GITHUB_ENV"
 
       - name: Install Bubblewrap CLI
-        run: npm install -g @bubblewrap/cli
+        run: npm install -g @bubblewrap/cli@1.25.0
 
       - name: Point Bubblewrap to JDK/SDK
         run: |
@@ -35,7 +43,7 @@ jobs:
           cat > "$HOME/.bubblewrap/config.json" <<EOF
           {
             "jdkPath": "$JAVA_HOME",
-            "androidSdkPath": "$ANDROID_HOME"
+            "androidSdkPath": "$ANDROID_SDK_FOR_BW"
           }
           EOF
           cat "$HOME/.bubblewrap/config.json"
