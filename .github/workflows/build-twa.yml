@@ -58,16 +58,22 @@ jobs:
           EOF
           cat "$HOME/.bubblewrap/config.json"
 
-      - name: Generate debug signing keystore
+      # Ключ подписи должен быть ПОСТОЯННЫМ: отпечаток его сертификата прописан в
+      # assetlinks.json на ilsoft-dev.github.io. Если каждый раз генерировать новый
+      # ключ, привязка (Digital Asset Links) не совпадёт, и TWA откроется с адресной
+      # строкой (Custom Tab). Ключ хранится в секрете репозитория TWA_KEYSTORE_BASE64.
+      - name: Restore signing keystore
         working-directory: android
+        env:
+          KEYSTORE_B64: ${{ secrets.TWA_KEYSTORE_BASE64 }}
         run: |
-          keytool -genkeypair -v \
-            -keystore android.keystore \
-            -alias androiddebugkey \
-            -keyalg RSA -keysize 2048 -validity 10000 \
-            -storepass android -keypass android \
-            -dname "CN=LINK Debug, OU=Dev, O=ILSoft-dev, L=NA, S=NA, C=US" \
-            -noprompt
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "::error::Не задан секрет TWA_KEYSTORE_BASE64 (Settings -> Secrets and variables -> Actions)."
+            exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > android.keystore
+          echo "Отпечаток ключа подписи (должен совпадать с assetlinks.json):"
+          keytool -list -v -keystore android.keystore -storepass android -alias androiddebugkey | grep "SHA256:"
 
       - name: Generate Android project from twa-manifest.json
         working-directory: android
@@ -79,6 +85,17 @@ jobs:
           BUBBLEWRAP_KEYSTORE_PASSWORD: android
           BUBBLEWRAP_KEY_PASSWORD: android
         run: bubblewrap build --skipPwaValidation
+
+      # Диагностика: каким сертификатом на самом деле подписан APK и какой у него пакет.
+      # sha256 (строчными, без двоеточий) должен начинаться с eb87bec4ae..., пакет — dev.ilsoft.link.
+      - name: Show APK signing certificate
+        continue-on-error: true
+        run: |
+          BT="$ANDROID_SDK_FOR_BW/build-tools"
+          APKSIGNER=$(ls "$BT"/*/apksigner | sort -V | tail -1)
+          AAPT2=$(ls "$BT"/*/aapt2 | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs android/app-release-signed.apk | grep -E "SHA-256|DN"
+          "$AAPT2" dump badging android/app-release-signed.apk | grep -E "^package:"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
