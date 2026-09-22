@@ -3,24 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>LINK — читалка книг, оригинал по желанию</title>
-<meta name="description" content="Читалка книг (FB2, EPUB, PDF, DOCX, TXT) с ИИ-помощником. Загрузите оригинал — и ИИ найдёт в нём место, соответствующее выделенному отрывку.">
-<link rel="canonical" href="https://ilsoft-dev.github.io/LINK/">
-<meta property="og:type" content="website">
-<meta property="og:site_name" content="LINK">
-<meta property="og:locale" content="ru_RU">
-<meta property="og:url" content="https://ilsoft-dev.github.io/LINK/">
-<meta property="og:title" content="LINK — читалка книг, оригинал по желанию">
-<meta property="og:description" content="Читалка книг с ИИ-помощником. Загрузите оригинал — и ИИ найдёт в нём место, соответствующее выделенному отрывку.">
-<meta property="og:image" content="https://ilsoft-dev.github.io/LINK/og-image.png">
-<meta property="og:image:type" content="image/png">
-<meta property="og:image:width" content="1200">
-<meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="LINK — читалка книг: перевод и оригинал рядом, сверка по выделенному отрывку">
-<meta name="twitter:card" content="summary_large_image">
-<meta name="twitter:title" content="LINK — читалка книг, оригинал по желанию">
-<meta name="twitter:description" content="Читалка книг с ИИ-помощником. Загрузите оригинал — и ИИ найдёт в нём место, соответствующее выделенному отрывку.">
-<meta name="twitter:image" content="https://ilsoft-dev.github.io/LINK/og-image.png">
+<title>LINK — читайте книгу с ИИ-помощником</title>
+<!-- CSP через meta — лучшее, что доступно на GitHub Pages (своих HTTP-
+     заголовков там нет). frame-ancestors/X-Frame-Options отсюда не
+     работают (только из HTTP-заголовка), от clickjacking это не
+     защищает. Но connect-src действует по-настоящему и не даёт ключу
+     утечь на чужой домен даже при гипотетическом XSS. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://voicebot-iwdm.onrender.com; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self';">
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#7A2E2E">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -112,9 +101,7 @@
     .tagline{
         font-family:'Inter', sans-serif; font-size:.72rem; letter-spacing:.22em;
         text-transform:uppercase; color:var(--text-soft); margin:.7rem 0 0;
-        text-wrap:balance;
     }
-    @media (max-width:340px){ .tagline{ letter-spacing:.12em; } }
     .card{
         width:100%; max-width:460px; background:var(--bg-card);
         border:1px solid var(--border); border-radius:20px;
@@ -428,7 +415,7 @@
     <div id="uploadScreen">
         <header>
             <h1 class="brand">LINK</h1>
-            <p class="tagline">Читалка. Оригинал — по желанию</p>
+            <p class="tagline">Читайте книгу с ИИ-помощником — в одиночку или сразу на двух языках</p>
             <div id="shelfLinkWrap" style="display:none;margin-top:1rem;">
                 <button id="shelfOpenBtn" class="cta-btn secondary" style="width:auto;display:inline-block;padding:.6rem 1.3rem;">📚 Моя полка <span id="shelfCount"></span></button>
             </div>
@@ -448,14 +435,14 @@
 
                 <div class="swap-row">
                     <div class="line"></div>
-                    <button class="round-btn swap-btn" id="swapBtn" title="Поменять файлы местами" aria-label="Поменять файлы местами">⇄</button>
+                    <button class="round-btn swap-btn" id="swapBtn" title="Поменять языки местами" aria-label="Поменять языки местами">⇄</button>
                     <div class="line"></div>
                 </div>
 
                 <div class="dropzone" id="zoneB" tabindex="0" role="button" aria-label="Загрузить оригинал для сравнения (необязательно)">
                     <div class="dz-icon">🔤</div>
                     <div class="dz-label" id="labelB">Оригинал <span style="opacity:.6;font-weight:400;">(необязательно)</span></div>
-                    <div class="dz-hint">Сверка выделенного места с исходником</div>
+                    <div class="dz-hint">Для сравнения и «Комментария»</div>
                     <div class="dz-meta">.txt · .fb2 · .epub · .pdf · .docx · .html · .zip</div>
                     <div class="dz-filename" id="filenameB">Файл не выбран</div>
                     <div class="dz-error" id="errorB"></div>
@@ -471,7 +458,7 @@
             <div class="status" id="status"></div>
         </main>
 
-        <footer>LINK — читалка с ИИ-помощником · файлы остаются на вашем устройстве</footer>
+        <footer>LINK — читать книгу на двух языках сразу</footer>
     </div>
 
     <!-- ============================================================
@@ -1414,7 +1401,7 @@
         if (!books.length) { list.innerHTML = '<div class="empty-msg">Пока нет сохранённых книг</div>'; return; }
 
         list.innerHTML = books.map(b => `
-            <div class="shelf-item" data-key="${escapeHtml(b.bookKey)}">
+            <div class="shelf-item" data-key="${escapeAttr(b.bookKey)}">
                 <div class="icon">${ {fb2:'📗', pdf:'📕', docx:'📘', html:'🌐'}[b.formatA] || '📄' }</div>
                 <div class="info">
                     <div class="title">${escapeHtml(b.title)}</div>
@@ -1422,7 +1409,7 @@
                     <div class="shelf-progress"><div class="fill" style="width:${b.progressPercent || 0}%"></div></div>
                 </div>
                 <div class="shelf-percent">${b.progressPercent || 0}%</div>
-                <button class="delete-btn" data-key="${escapeHtml(b.bookKey)}" title="Удалить">✕</button>
+                <button class="delete-btn" data-key="${escapeAttr(b.bookKey)}" title="Удалить">✕</button>
             </div>
         `).join('');
 
@@ -1491,6 +1478,18 @@
         const div = document.createElement('div');
         div.textContent = str;
         return div.innerHTML;
+    }
+    // escapeHtml экранирует &, <, > (безопасно для ТЕКСТОВОГО содержимого),
+    // но не кавычки. Для вставки в HTML-атрибут (data-*="...", value="...")
+    // нужна отдельная функция — иначе значение с кавычкой может выйти за
+    // пределы атрибута.
+    function escapeAttr(str) {
+        return String(str)
+            .replaceAll('&', '&amp;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#39;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;');
     }
 
     function enterReader(mode) {
@@ -2045,48 +2044,25 @@
     // еженедельно — если эта модель вдруг начнёт отвечать 404/400, зайдите на
     // openrouter.ai/models?max_price=0 и замените ID здесь на актуальный.
     const OPENROUTER_MODEL = 'openai/gpt-oss-20b:free';
-    async function callOpenRouterOnce(messages, maxTokens) {
-        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${READER.openrouterApiKey}` },
-            body: JSON.stringify({
-                model: OPENROUTER_MODEL,
-                messages,
-                temperature: 0.6,
-                max_tokens: maxTokens || 1500,
-            })
-        });
-        if (!response.ok) {
-            const err = await response.json().catch(() => ({}));
-            throw new Error(err.error?.message || ('Ошибка OpenRouter (HTTP ' + response.status + ')'));
-        }
-        const data = await response.json();
-        return (data.choices?.[0]?.message?.content || '').trim();
-    }
+    // Прямой fetch на openrouter.ai убран: проверено вживую — без VPN из
+    // Беларуси он тоже падает с failed to fetch, так что не давал никакой
+    // выгоды в скорости, зато держал два разных домена для ключа/CSP/логики
+    // вместо одного. Теперь оба провайдера всегда идут через один relay.
     async function callOpenRouterViaRelay(messages, maxTokens) {
         return callViaRelay('openrouter', READER.openrouterApiKey, messages, maxTokens, OPENROUTER_MODEL);
     }
 
     // Единая точка входа для ИИ-функций (саммари/комментарий/оригинал).
-    // Порядок: прямой OpenRouter (быстрее всего, если сам доступен из
-    // Беларуси без VPN) → OpenRouter через relay (на случай, если прямой
-    // доступ всё же заблокирован — тогда не нужно ничего перенастраивать
-    // руками, сработает само) → Groq через relay как последний вариант.
-    // Если настроен только один ключ — используется только он.
+    // Порядок: OpenRouter через relay (основной) → Groq через relay
+    // (запасной). Если настроен только один ключ — используется только он.
     async function callLLM(messages, maxTokens) {
         if (READER.openrouterApiKey) {
             try {
-                const content = await callOpenRouterOnce(messages, maxTokens);
+                const content = await callOpenRouterViaRelay(messages, maxTokens);
                 if (content) return content;
             } catch (err) {
-                console.warn('Прямой OpenRouter не сработал, пробуем через relay:', err);
-                try {
-                    const content = await callOpenRouterViaRelay(messages, maxTokens);
-                    if (content) return content;
-                } catch (err2) {
-                    console.warn('OpenRouter через relay тоже не сработал, пробуем Groq (если настроен):', err2);
-                    if (!READER.apiKey) throw err2;
-                }
+                console.warn('OpenRouter через relay не сработал, пробуем Groq (если настроен):', err);
+                if (!READER.apiKey) throw err;
             }
         }
         if (READER.apiKey) return await callGroq(messages, maxTokens);
