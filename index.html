@@ -265,6 +265,14 @@
         font-family:'Lora',serif; font-weight:700; font-size:1.05rem; margin-bottom:.9rem;
     }
     .close-btn{ background:none; border:none; color:var(--text-soft); font-size:1.1rem; cursor:pointer; }
+    .shelf-actions{ display:flex; flex-wrap:wrap; gap:.5rem; margin:-.3rem 0 .9rem; }
+    .shelf-action-btn{
+        background:var(--bg-soft); color:var(--accent); border:1px solid var(--border);
+        border-radius:999px; padding:.4rem .9rem; cursor:pointer;
+        font-family:'Inter',sans-serif; font-size:.8rem;
+    }
+    .shelf-action-btn:disabled{ opacity:.35; cursor:not-allowed; }
+    .shelf-io-status{ font-family:'Inter',sans-serif; font-size:.8rem; color:var(--text-soft); margin:-.4rem 0 .9rem; }
 
     /* ===== Панель «Оформление» — слайдеры ===== */
     .type-row{ margin-bottom:1.1rem; }
@@ -395,6 +403,9 @@
     .toc-item .num{ font-variant-numeric:tabular-nums; color:var(--text-soft); font-size:.78rem; min-width:1.3em; }
     .toc-item .title{ font-size:.92rem; line-height:1.4; }
     .toc-item:hover .title, .toc-item:hover .num{ color:var(--accent); }
+    .toc-item .title{ flex:1; }
+    .toc-item .status{ font-variant-numeric:tabular-nums; color:var(--text-soft); font-size:.78rem; white-space:nowrap; }
+    .toc-item .status.done{ color:var(--accent); }
 
     @media (max-width:480px){
         .card{ padding:1.3rem; }
@@ -416,7 +427,7 @@
         <header>
             <h1 class="brand">LINK</h1>
             <p class="tagline">Читайте книгу с ИИ-помощником — в одиночку или сразу на двух языках</p>
-            <div id="shelfLinkWrap" style="display:none;margin-top:1rem;">
+            <div id="shelfLinkWrap" style="margin-top:1rem;">
                 <button id="shelfOpenBtn" class="cta-btn secondary" style="width:auto;display:inline-block;padding:.6rem 1.3rem;">📚 Моя полка <span id="shelfCount"></span></button>
             </div>
         </header>
@@ -520,6 +531,13 @@
         <div class="sheet-overlay" id="sheetOverlay"></div>
     <div class="bookmarks-panel" id="shelfPanel">
         <div class="panel-header"><span>📚 Моя полка</span><button class="close-btn" id="shelfClose">✕</button></div>
+        <div class="shelf-actions">
+            <button class="shelf-action-btn" id="shelfExportBtn" title="Сохранить всю полку в .json-файл">⬇ Экспорт</button>
+            <button class="shelf-action-btn" id="shelfShareBtn" title="Отправить файл полки в другое приложение" style="display:none">↗ Поделиться</button>
+            <button class="shelf-action-btn" id="shelfImportBtn" title="Добавить книги из ранее сохранённого .json-файла">⬆ Импорт</button>
+            <input type="file" id="shelfImportInput" accept=".json,application/json" style="display:none">
+        </div>
+        <div class="shelf-io-status" id="shelfIoStatus" style="display:none"></div>
         <div id="shelfList"><div class="empty-msg">Пока нет сохранённых книг</div></div>
     </div>
 
@@ -629,6 +647,21 @@
                     try { localStorage.setItem(key, value); return; } catch (e) { available = false; }
                 }
                 memory[key] = String(value);
+            },
+            // Все ключи с заданным префиксом — и из localStorage, и из
+            // запасного хранилища в памяти (экспорт/импорт полки)
+            keys(prefix) {
+                const out = new Set();
+                if (available) {
+                    try {
+                        for (let i = 0; i < localStorage.length; i++) {
+                            const k = localStorage.key(i);
+                            if (k && k.startsWith(prefix)) out.add(k);
+                        }
+                    } catch (e) {}
+                }
+                Object.keys(memory).forEach(k => { if (k.startsWith(prefix)) out.add(k); });
+                return Array.from(out);
             }
         };
     })();
@@ -640,11 +673,13 @@
     // ============================================================
     const themeBtn = $('themeToggle');
     const themeIcon = $('themeIcon');
+    // Иконка на кнопке — это всегда подсказка, КУДА переключит следующий клик
+    // (не текущая тема): light→dark показываем луну, dark→ink — половинчатый
+    // кружок (eink), ink→light — солнце.
     const THEME_ICONS = {
-        // light: показываем "луну" — намекает, куда переключит следующий клик
         light: '<path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/>',
-        dark: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
-        ink: '<circle cx="12" cy="12" r="10"/><path d="M12 18a6 6 0 0 0 0-12v12z"/>',
+        dark: '<circle cx="12" cy="12" r="10"/><path d="M12 18a6 6 0 0 0 0-12v12z"/>',
+        ink: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>',
     };
     const THEME_TITLES = { light: 'Тема: светлая (нажмите для тёмной)', dark: 'Тема: тёмная (нажмите для monochrome ink)', ink: 'Тема: monochrome ink (нажмите для светлой)' };
     function setTheme(mode) {
@@ -1395,8 +1430,9 @@
         const books = await shelfGetAll();
         books.sort((a, b) => b.lastOpened - a.lastOpened);
 
-        $('shelfLinkWrap').style.display = books.length ? '' : 'none';
         $('shelfCount').textContent = books.length ? `(${books.length})` : '';
+        $('shelfExportBtn').disabled = !books.length;
+        $('shelfShareBtn').disabled = !books.length;
 
         if (!books.length) { list.innerHTML = '<div class="empty-msg">Пока нет сохранённых книг</div>'; return; }
 
@@ -1454,11 +1490,271 @@
         enterReader(entry.chaptersB ? 'link' : 'read');
     }
 
-    function openShelfPanel() { renderShelf(); setSheet($('shelfPanel'), true); }
+    function openShelfPanel() { showShelfIoStatus(''); renderShelf(); setSheet($('shelfPanel'), true); }
     function closeShelfPanel() { setSheet($('shelfPanel'), false); }
     $('shelfOpenBtn').addEventListener('click', openShelfPanel);
     $('shelfClose').addEventListener('click', closeShelfPanel);
     renderShelf(); // первичная отрисовка кнопки/счётчика при загрузке страницы
+
+    // ============================================================
+    // ЭКСПОРТ / ИМПОРТ ПОЛКИ — перенос библиотеки между устройствами
+    // ============================================================
+    // На полке лежит уже разобранный текст (chaptersA/B), а состояние книги —
+    // в localStorage под «bookKey:поле», так что экспорт — сериализация того,
+    // что уже хранится. Импорт только добавляет: локальное не затирается.
+    const LINK_EXPORT_VERSION = 1;
+    const BOOK_STATE_JSON_FIELDS = ['bookmarks', 'summaryHistory'];
+    const BOOK_STATE_NUMBER_FIELDS = ['furthestScrollBottom', 'lastScrollTop'];
+
+    function readBookState(bookKey) {
+        const prefix = bookKey + ':';
+        const state = {};
+        safeStorage.keys(prefix).forEach(k => {
+            const field = k.slice(prefix.length);
+            const raw = safeStorage.getItem(k);
+            if (raw === null) return;
+            if (BOOK_STATE_JSON_FIELDS.includes(field)) {
+                try { state[field] = JSON.parse(raw); } catch (e) {}
+            } else if (BOOK_STATE_NUMBER_FIELDS.includes(field)) {
+                const n = parseInt(raw);
+                if (Number.isFinite(n)) state[field] = n;
+            } else {
+                state[field] = raw;   // неизвестное поле — переносим как есть
+            }
+        });
+        return state;
+    }
+
+    async function exportLibrary() {
+        const books = await shelfGetAll();
+        return {
+            linkExportVersion: LINK_EXPORT_VERSION,
+            exportedAt: Date.now(),
+            books: books.map(entry => ({ shelf: entry, state: readBookState(entry.bookKey) })),
+        };
+    }
+
+    function makeJSONFile(data, filename) {
+        return new File([JSON.stringify(data)], filename, { type: 'application/json' });
+    }
+    function canShareFiles() {
+        try {
+            return !!(navigator.share && navigator.canShare
+                && navigator.canShare({ files: [makeJSONFile({}, 'test.json')] }));
+        } catch (e) { return false; }
+    }
+    // share=true — Web Share API (сразу в Telegram/почту/Drive), иначе и при
+    // ошибке share — обычное скачивание (в TWA — через Android Download Manager)
+    async function downloadJSON(data, filename, share) {
+        const file = makeJSONFile(data, filename);
+        if (share && canShareFiles()) {
+            try {
+                await navigator.share({ files: [file], title: 'LINK — моя полка' });
+                return 'shared';
+            } catch (e) {
+                if (e.name === 'AbortError') return 'cancelled';
+                console.warn('Не удалось поделиться файлом, скачиваю:', e.message);
+            }
+        }
+        const url = URL.createObjectURL(file);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+        return 'downloaded';
+    }
+
+    // --- проверка данных из файла: он пришёл извне, доверять структуре нельзя ---
+    function sanitizeChapters(chapters) {
+        if (!Array.isArray(chapters)) return null;
+        const out = [];
+        for (const ch of chapters) {
+            if (!ch || !Array.isArray(ch.paragraphs)) return null;
+            out.push({
+                title: typeof ch.title === 'string' ? ch.title : '',
+                paragraphs: ch.paragraphs.filter(p => typeof p === 'string'),
+            });
+        }
+        return out.some(ch => ch.paragraphs.length) ? out : null;
+    }
+    function sanitizeShelfEntry(shelf) {
+        if (!shelf || typeof shelf !== 'object') return null;
+        const chaptersA = sanitizeChapters(shelf.chaptersA);
+        if (!chaptersA) return null;
+        const chaptersB = shelf.chaptersB ? sanitizeChapters(shelf.chaptersB) : null;
+        const str = v => (typeof v === 'string' && v) ? v : null;
+        const filenameA = str(shelf.filenameA) || 'book.txt';
+        const progress = Number(shelf.progressPercent);
+        return {
+            // Ключ пересчитываем по тексту — так же его считает enterReader(),
+            // иначе состояние книги легло бы под ключ, который никто не прочитает
+            bookKey: bookFingerprint({ chapters: chaptersA }),
+            title: str(shelf.title) || filenameA.replace(/\.[^.]+$/, ''),
+            filenameA,
+            formatA: str(shelf.formatA) || 'txt',
+            chaptersA,
+            filenameB: chaptersB ? (str(shelf.filenameB) || 'original.txt') : null,
+            formatB: chaptersB ? (str(shelf.formatB) || 'txt') : null,
+            chaptersB,
+            progressPercent: Number.isFinite(progress) ? Math.max(0, Math.min(100, Math.round(progress))) : 0,
+            lastOpened: Number.isFinite(Number(shelf.lastOpened)) ? Number(shelf.lastOpened) : Date.now(),
+        };
+    }
+    function sanitizeBookmarks(list) {
+        if (!Array.isArray(list)) return [];
+        // id уходит в разметку (data-id / getElementById) — только вида p-N
+        return list.filter(b => b && typeof b.id === 'string' && /^p-\d+$/.test(b.id)).map(b => ({
+            id: b.id,
+            chapter: typeof b.chapter === 'string' ? b.chapter : '',
+            preview: typeof b.preview === 'string' ? b.preview : '',
+            timestamp: Number(b.timestamp) || 0,
+        }));
+    }
+    function sanitizeSummaryHistory(list) {
+        if (!Array.isArray(list)) return [];
+        return list.filter(s => s && typeof s.summary === 'string')
+            .map(s => ({ timestamp: Number(s.timestamp) || 0, summary: s.summary }));
+    }
+    function parseStoredJSON(raw, fallback) {
+        try { const v = JSON.parse(raw); return v == null ? fallback : v; } catch (e) { return fallback; }
+    }
+
+    // Слияние состояния одной книги по правилам ТЗ. isNewBook — книги не было
+    // на полке этого устройства до импорта.
+    function mergeBookState(bookKey, imported, isNewBook) {
+        if (!imported || typeof imported !== 'object') return;
+        const k = field => bookKey + ':' + field;
+
+        // Закладки: union по id, при совпадении остаётся локальная
+        const localBookmarks = sanitizeBookmarks(parseStoredJSON(safeStorage.getItem(k('bookmarks')), []));
+        const seen = new Set(localBookmarks.map(b => b.id));
+        const addedBookmarks = sanitizeBookmarks(imported.bookmarks).filter(b => !seen.has(b.id) && seen.add(b.id));
+        if (addedBookmarks.length) {
+            safeStorage.setItem(k('bookmarks'), JSON.stringify(localBookmarks.concat(addedBookmarks)));
+        }
+
+        // Саммари: union без дублей, по времени, последние 10 (как в generateSummary)
+        const localHistory = sanitizeSummaryHistory(parseStoredJSON(safeStorage.getItem(k('summaryHistory')), []));
+        const sig = s => s.timestamp + '\u0000' + s.summary;
+        const known = new Set(localHistory.map(sig));
+        const addedHistory = sanitizeSummaryHistory(imported.summaryHistory).filter(s => !known.has(sig(s)) && known.add(sig(s)));
+        if (addedHistory.length) {
+            const merged = localHistory.concat(addedHistory).sort((a, b) => a.timestamp - b.timestamp).slice(-10);
+            safeStorage.setItem(k('summaryHistory'), JSON.stringify(merged));
+        }
+
+        // Самое дальнее место: max — прогресс не откатывается
+        const importedFurthest = parseInt(imported.furthestScrollBottom);
+        const localFurthest = parseInt(safeStorage.getItem(k('furthestScrollBottom'))) || 0;
+        if (Number.isFinite(importedFurthest) && importedFurthest > localFurthest) {
+            safeStorage.setItem(k('furthestScrollBottom'), importedFurthest);
+        }
+
+        // Текущая позиция — «где я сейчас на этом устройстве»: берём
+        // импортированную только для новой книги (или если своей ещё нет)
+        const importedTop = parseInt(imported.lastScrollTop);
+        if (Number.isFinite(importedTop) && (isNewBook || safeStorage.getItem(k('lastScrollTop')) === null)) {
+            safeStorage.setItem(k('lastScrollTop'), importedTop);
+        }
+
+        // Прочие поля: только если локально такого ещё нет
+        Object.keys(imported).forEach(field => {
+            if (BOOK_STATE_JSON_FIELDS.includes(field) || BOOK_STATE_NUMBER_FIELDS.includes(field)) return;
+            if (typeof imported[field] !== 'string' || safeStorage.getItem(k(field)) !== null) return;
+            safeStorage.setItem(k(field), imported[field]);
+        });
+    }
+
+    async function importLibrary(file) {
+        let data;
+        try { data = JSON.parse(await file.text()); }
+        catch (e) { throw new Error('Файл не похож на экспорт полки LINK (не JSON).'); }
+        if (!data || typeof data.linkExportVersion !== 'number' || !Array.isArray(data.books)) {
+            throw new Error('Файл не похож на экспорт полки LINK.');
+        }
+        if (data.linkExportVersion > LINK_EXPORT_VERSION) {
+            throw new Error('Файл сохранён более новой версией LINK — обновите приложение.');
+        }
+
+        const localBooks = await shelfGetAll();
+        const localByKey = new Map(localBooks.map(b => [b.bookKey, b]));
+        const stats = { added: 0, updated: 0, skippedFull: 0, invalid: 0 };
+
+        const incoming = [];
+        for (const item of data.books) {
+            const shelf = sanitizeShelfEntry(item && item.shelf);
+            if (!shelf) { stats.invalid++; continue; }
+            incoming.push({ shelf, state: item.state });
+        }
+        // Свежие книги — первыми: если на полке мало места, попадут они.
+        // Лимит полки при импорте не вытесняет локальные книги.
+        incoming.sort((a, b) => b.shelf.lastOpened - a.shelf.lastOpened);
+        let freeSlots = Math.max(0, SHELF_MAX_ENTRIES - localBooks.length);
+
+        const handled = new Set();
+        for (const { shelf, state } of incoming) {
+            if (handled.has(shelf.bookKey)) continue;   // одна книга дважды в файле
+            handled.add(shelf.bookKey);
+            const local = localByKey.get(shelf.bookKey);
+            if (!local) {
+                if (freeSlots <= 0) { stats.skippedFull++; continue; }
+                freeSlots--;
+                await shelfPut(shelf);
+                mergeBookState(shelf.bookKey, state, true);
+                stats.added++;
+            } else {
+                // Книга уже есть: локальные поля полки остаются, кроме прогресса (max)
+                if (shelf.progressPercent > (local.progressPercent || 0)) {
+                    await shelfPut({ ...local, progressPercent: shelf.progressPercent });
+                }
+                mergeBookState(shelf.bookKey, state, false);
+                stats.updated++;
+            }
+        }
+        return stats;
+    }
+
+    function showShelfIoStatus(text) {
+        const el = $('shelfIoStatus');
+        el.textContent = text;
+        el.style.display = text ? '' : 'none';
+    }
+    async function onShelfExport(share) {
+        showShelfIoStatus('');
+        try {
+            const data = await exportLibrary();
+            if (!data.books.length) { showShelfIoStatus('Полка пуста — экспортировать нечего.'); return; }
+            const date = new Date().toISOString().slice(0, 10);
+            const result = await downloadJSON(data, `link-library-${date}.json`, share);
+            if (result === 'downloaded') showShelfIoStatus(`Файл полки сохранён (книг: ${data.books.length}).`);
+            else if (result === 'shared') showShelfIoStatus(`Файл полки отправлен (книг: ${data.books.length}).`);
+        } catch (e) {
+            showShelfIoStatus('Не удалось экспортировать полку: ' + e.message);
+        }
+    }
+    $('shelfShareBtn').style.display = canShareFiles() ? '' : 'none';
+    $('shelfExportBtn').addEventListener('click', () => onShelfExport(false));
+    $('shelfShareBtn').addEventListener('click', () => onShelfExport(true));
+    $('shelfImportBtn').addEventListener('click', () => $('shelfImportInput').click());
+    $('shelfImportInput').addEventListener('change', async (e) => {
+        const file = e.target.files && e.target.files[0];
+        e.target.value = '';   // чтобы тот же файл можно было выбрать ещё раз
+        if (!file) return;
+        showShelfIoStatus('Импорт…');
+        try {
+            const s = await importLibrary(file);
+            const parts = [`добавлено книг: ${s.added}`, `обновлено: ${s.updated}`];
+            if (s.skippedFull) parts.push(`не поместилось (лимит ${SHELF_MAX_ENTRIES}): ${s.skippedFull}`);
+            if (s.invalid) parts.push(`повреждённых записей пропущено: ${s.invalid}`);
+            showShelfIoStatus('Импорт завершён — ' + parts.join(', ') + '.');
+        } catch (err) {
+            showShelfIoStatus(err.message);
+        }
+        renderShelf();
+    });
 
     function renderBook(parsedA) {
         const container = $('bookContent');
@@ -1509,6 +1805,7 @@
 
         renderBook(parsedA);
         ALL_PARAGRAPHS = Array.from(document.querySelectorAll('#bookContent p[id^="p-"]'));
+        buildChapterIndex();
         renderBookmarks();
         applyFontSize();
 
@@ -1830,16 +2127,58 @@
     // ============================================================
     // ОГЛАВЛЕНИЕ
     // ============================================================
+    // Разметка книги неизменна, пока она открыта, поэтому индекс «абзац → глава»
+    // строим один раз при входе в читалку. Глава c — абзацы после c-го
+    // .chapter-title (как пункт c в оглавлении); абзацы до первого заголовка
+    // ни к одному пункту не относятся (-1). Абзацы главы идут подряд, поэтому
+    // хватает начала и длины — прочитанное считается без прохода по книге.
+    let chapterOfParagraph = [];     // [i] → номер главы абзаца i или -1
+    let paragraphsPerChapter = [];   // [c] → сколько абзацев в главе c
+    let chapterFirstParagraph = [];  // [c] → индекс первого абзаца главы c в ALL_PARAGRAPHS
+    function buildChapterIndex() {
+        chapterOfParagraph = new Array(ALL_PARAGRAPHS.length);
+        paragraphsPerChapter = [];
+        chapterFirstParagraph = [];
+        let c = -1, i = 0;
+        for (const el of $('bookContent').children) {
+            if (el.classList.contains('chapter-title')) {
+                c++;
+                paragraphsPerChapter[c] = 0;
+                chapterFirstParagraph[c] = i;
+            } else if (el === ALL_PARAGRAPHS[i]) {
+                chapterOfParagraph[i] = c;
+                if (c >= 0) paragraphsPerChapter[c]++;
+                i++;
+            }
+        }
+    }
+    // ✓ — глава дочитана, N% — начата, ○ — не начата (по самому дальнему
+    // когда-либо прочитанному абзацу, как прогресс на полке)
+    function chapterStatus(c, furthestIdx) {
+        const total = paragraphsPerChapter[c] || 0;
+        const first = chapterFirstParagraph[c] || 0;
+        const read = Math.max(0, Math.min(total, furthestIdx - first + 1));
+        if (!total) return furthestIdx >= first ? '✓' : '○';   // заголовок без текста
+        if (read === 0) return '○';
+        if (read === total) return '✓';
+        // не показываем «100%» у недочитанной и «0%» у начатой главы
+        return Math.min(99, Math.max(1, Math.round(read / total * 100))) + '%';
+    }
     function renderTOC() {
         const list = $('tocList');
         const chapters = document.querySelectorAll('.chapter-title');
         if (!chapters.length) { list.innerHTML = '<div class="empty-msg">Глав не найдено</div>'; return; }
-        list.innerHTML = Array.from(chapters).map((ch, i) => `
+        const furthestIdx = getFurthestParagraphIndex();
+        list.innerHTML = Array.from(chapters).map((ch, i) => {
+            const status = chapterStatus(i, furthestIdx);
+            return `
             <div class="toc-item" data-index="${i}">
                 <span class="num">${i + 1}</span>
                 <span class="title">${escapeHtml(ch.textContent.trim() || ('Часть ' + (i + 1)))}</span>
+                <span class="status${status === '✓' ? ' done' : ''}">${status}</span>
             </div>
-        `).join('');
+        `;
+        }).join('');
         list.querySelectorAll('.toc-item').forEach((item, i) => {
             item.addEventListener('click', () => {
                 chapters[i].scrollIntoView({ behavior: 'smooth', block: 'start' });
