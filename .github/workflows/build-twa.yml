@@ -58,32 +58,61 @@ jobs:
           EOF
           cat "$HOME/.bubblewrap/config.json"
 
-      # Ключ подписи должен быть ПОСТОЯННЫМ: отпечаток его сертификата прописан в
-      # assetlinks.json на ilsoft-dev.github.io. Если каждый раз генерировать новый
-      # ключ, привязка (Digital Asset Links) не совпадёт, и TWA откроется с адресной
-      # строкой (Custom Tab). Ключ хранится в секрете репозитория TWA_KEYSTORE_BASE64.
+      # SEC: пароли keystore — ТОЛЬКО из секретов репозитория. Раньше здесь
+      # был хардкод "android" (дефолтный пароль debug-keystore) прямо в
+      # этом публичном файле — если бы TWA_KEYSTORE_BASE64 когда-нибудь
+      # утёк (артефакт, лог, неаккуратный коммит), его открыли бы без
+      # всякого перебора. Секреты KEYSTORE_PASSWORD / KEY_PASSWORD нужно
+      # завести в Settings -> Secrets and variables -> Actions ДО первого
+      # запуска этого workflow, см. инструкцию по смене пароля в чате.
       - name: Restore signing keystore
         working-directory: android
         env:
           KEYSTORE_B64: ${{ secrets.TWA_KEYSTORE_BASE64 }}
+          STOREPASS: ${{ secrets.KEYSTORE_PASSWORD }}
         run: |
           if [ -z "$KEYSTORE_B64" ]; then
             echo "::error::Не задан секрет TWA_KEYSTORE_BASE64 (Settings -> Secrets and variables -> Actions)."
             exit 1
           fi
+          if [ -z "$STOREPASS" ]; then
+            echo "::error::Не задан секрет KEYSTORE_PASSWORD."
+            exit 1
+          fi
           echo "$KEYSTORE_B64" | base64 -d > android.keystore
           echo "Отпечаток ключа подписи (должен совпадать с assetlinks.json):"
-          keytool -list -v -keystore android.keystore -storepass android -alias androiddebugkey | grep "SHA256:"
+          keytool -list -v -keystore android.keystore -storepass "$STOREPASS" -alias androiddebugkey | grep "SHA256:"
 
       - name: Generate Android project from twa-manifest.json
         working-directory: android
         run: bubblewrap update --skipVersionUpgrade
 
+      # SEC: Certificate Pinning убран. TWA не рендерит контент в WebView
+      # внутри процесса этого приложения — контент открывается в Chrome
+      # (тот же механизм, что Custom Tabs, отдельный процесс/браузер).
+      # NetworkSecurityConfig действует на сетевые запросы САМОГО
+      # приложения (HttpsURLConnection, встроенный WebView) — а fetch() из
+      # JS на странице LINK выполняется внутри Chrome, с его собственным
+      # сетевым стеком, никак не привязанным к манифесту этого APK. Пин
+      # здесь не защищал бы то, ради чего его ставили, а стоил бы
+      # обязательной ручной пересборки APK каждые 1-2 месяца из-за ротации
+      # сертификата Render. Оставляем только дешёвые, реально действующие
+      # флаги харднинга манифеста: без cleartext-трафика и без auto-backup.
+      - name: Harden AndroidManifest.xml
+        working-directory: android
+        run: |
+          MANIFEST="app/src/main/AndroidManifest.xml"
+          sed -i \
+            -e 's#<application #<application android:usesCleartextTraffic="false" android:allowBackup="false" #' \
+            "$MANIFEST"
+          echo "--- <application ...> в AndroidManifest.xml ---"
+          grep -o '<application[^>]*>' "$MANIFEST"
+
       - name: Build APK
         working-directory: android
         env:
-          BUBBLEWRAP_KEYSTORE_PASSWORD: android
-          BUBBLEWRAP_KEY_PASSWORD: android
+          BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          BUBBLEWRAP_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: bubblewrap build --skipPwaValidation
 
       # Диагностика: каким сертификатом на самом деле подписан APK и какой у него пакет.
