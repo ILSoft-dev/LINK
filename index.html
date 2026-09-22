@@ -186,9 +186,14 @@
     body.dark .book-content{ }
     .book-content.font-scale{ }
     .book-content p{ margin:0 0 1.15rem; text-indent:var(--p-indent, 1.4rem); position:relative; }
+    /* Кружок-закладка ставится не на полях страницы, а внутри самого абзаца —
+       в пустом месте, которое и так оставляет абзацный отступ первой строки.
+       При нулевом отступе (пользователь может выключить его слайдером)
+       съезжает к самому краю текста, а не улетает в поле страницы. */
     .book-content p.bookmarked::before{
-        content:''; position:absolute; left:-0.75rem; top:0.45em;
-        width:7px; height:7px; border-radius:50%; background:var(--accent);
+        content:''; position:absolute;
+        left:calc(var(--p-indent, 1.4rem) / 2 - 3px); top:0.6em;
+        width:6px; height:6px; border-radius:50%; background:var(--accent);
     }
     .book-content h2.chapter-title{
         font-family:'Lora', serif; font-weight:700; font-size:1.35rem;
