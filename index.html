@@ -185,7 +185,8 @@
     }
     body.dark .book-content{ }
     .book-content.font-scale{ }
-    .book-content p{ margin:0 0 1.15rem; text-indent:var(--p-indent, 1.4rem); position:relative; }
+    .book-content p{ margin:0 0 1.15rem; text-indent:var(--p-indent, 1.4rem); position:relative; transition:background-color .6s ease; }
+    .book-content p.search-highlight{ background-color:var(--accent-soft); border-radius:6px; }
     /* Кружок-закладка ставится не на полях страницы, а внутри самого абзаца —
        в пустом месте, которое и так оставляет абзацный отступ первой строки.
        При нулевом отступе (пользователь может выключить его слайдером)
@@ -410,6 +411,55 @@
     .toc-item:hover .title, .toc-item:hover .num{ color:var(--accent); }
     .toc-item .title{ flex:1; }
     .toc-item .status{ font-variant-numeric:tabular-nums; color:var(--text-soft); font-size:.78rem; white-space:nowrap; }
+
+    /* ===== Поиск по книге — оверлей под топбаром, не боковая панель и не bottom sheet ===== */
+    .search-overlay{ position:fixed; inset:0; background:rgba(20,16,12,.4); z-index:139; display:none; }
+    .search-overlay.open{ display:block; }
+    .search-panel{
+        position:fixed; top:59px; left:0; right:0; z-index:140;
+        max-height:calc(100vh - 59px); max-height:calc(100dvh - 59px);
+        background:var(--bg-card); border-bottom:1px solid var(--border);
+        padding:1.1rem 1.1rem 1.3rem; overflow-y:auto;
+        /* -100vh, а не -110% — высота панели зависит от числа результатов, и
+           процентный translate от собственной (маленькой) высоты не уводил бы
+           её за пределы экрана целиком, оставляя снизу полоску, перехватывающую тапы */
+        transform:translateY(-100vh); transition:transform .25s ease;
+        pointer-events:none;
+        box-shadow:var(--shadow);
+    }
+    .search-panel.open{ transform:translateY(0); pointer-events:auto; }
+    .search-input{
+        width:100%; padding:.7rem .95rem; border-radius:10px;
+        border:1px solid var(--border); background:var(--bg); color:var(--text);
+        font-family:'Inter',sans-serif; font-size:.95rem; outline:none;
+        transition:border-color .2s;
+    }
+    .search-input:focus{ border-color:var(--accent); }
+    .search-mode-switch{ display:flex; gap:.4rem; margin-top:.8rem; }
+    .search-mode-btn{
+        flex:1; padding:.4rem .5rem; border-radius:999px; border:1px solid var(--border);
+        background:var(--bg-soft); color:var(--text-soft); font-family:'Inter',sans-serif;
+        font-size:.78rem; cursor:pointer;
+    }
+    .search-mode-btn.active{ background:var(--accent); color:var(--bg-card); border-color:var(--accent); }
+    .search-result{ padding:.85rem 0; border-bottom:1px solid var(--border); cursor:pointer; }
+    .search-result:last-child{ border-bottom:none; }
+    .search-result .chapter{
+        display:flex; align-items:center; gap:.5rem;
+        font-family:'Inter',sans-serif; font-size:.72rem; text-transform:uppercase;
+        letter-spacing:.03em; color:var(--text-soft);
+    }
+    .search-result .source-tag{
+        background:var(--bg-soft); border-radius:999px; padding:.1rem .55rem;
+        font-size:.68rem; text-transform:none; letter-spacing:0;
+    }
+    .search-result .snippet{ font-family:'PT Serif',serif; font-size:.92rem; line-height:1.5; margin-top:.35rem; }
+    .search-result .snippet mark{ background:var(--accent-soft); color:var(--accent); font-weight:700; border-radius:3px; padding:0 .15em; }
+    .search-hint, .search-empty{
+        padding:1.1rem 0; text-align:center; color:var(--text-soft);
+        font-family:'Inter',sans-serif; font-size:.85rem;
+    }
+    .search-sentinel{ height:1px; }
     .toc-item .status.done{ color:var(--accent); }
 
     @media (max-width:480px){
@@ -485,6 +535,9 @@
             <button id="backBtn" class="round-btn" title="К загрузке">←</button>
             <div class="chapter-indicator" id="chapterIndicator"></div>
             <button id="tocToggle" class="round-btn" title="Оглавление">☰</button>
+            <button id="searchToggle" class="round-btn" title="Поиск по книге">
+                <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+            </button>
         </div>
         <div class="progress-track" id="progressTrack"><div class="progress-fill" id="progressBar"></div></div>
 
@@ -556,6 +609,19 @@
     <div class="toc-panel" id="tocPanel">
         <div class="panel-header"><span>☰ Оглавление</span><button class="close-btn" id="tocClose">✕</button></div>
         <div id="tocList"></div>
+    </div>
+
+    <!-- ПАНЕЛЬ ПОИСКА -->
+    <div class="search-overlay" id="searchOverlay"></div>
+    <div class="search-panel" id="searchPanel">
+        <div class="panel-header"><span>🔍 Поиск по книге</span><button class="close-btn" id="searchClose">✕</button></div>
+        <input type="text" id="searchInput" class="search-input" placeholder="Что ищем?" autocomplete="off" autocorrect="off" spellcheck="false">
+        <div class="search-mode-switch" id="searchModeSwitch" style="display:none">
+            <button type="button" class="search-mode-btn" data-mode="a">Перевод</button>
+            <button type="button" class="search-mode-btn" data-mode="b">Оригинал</button>
+            <button type="button" class="search-mode-btn" data-mode="both">Оба</button>
+        </div>
+        <div id="searchResults"></div>
     </div>
 
     <!-- ПАНЕЛЬ ОФОРМЛЕНИЯ -->
@@ -1873,6 +1939,7 @@
         // поверх экрана загрузки, если её не закрыли явно перед "Назад"
         closeBookmarksPanel();
         closeTOC();
+        closeSearch();
         closeTypePanel();
         closeAssistantPanel();
     });
@@ -2025,6 +2092,22 @@
         return p ? p.textContent.trim().slice(0, 80) + '…' : '';
     }
 
+    // Переход к абзацу (из закладки или результата поиска). НЕ через
+    // scrollIntoView({block:'center'}) — на абзаце выше вьюпорта это
+    // центрирует элемент целиком, а не его верх, и начало абзаца уезжает
+    // за экран. Считаем позицию скролла сами, отступ — высота топбара +
+    // несколько строк текста (чтобы верх абзаца не прилипал к самому краю).
+    // lineHeightPx — через getComputedStyle, а не хардкод: размер шрифта и
+    // межстрочный интервал настраиваются пользователем (typeFontSize/typeLineHeight).
+    function scrollToParagraph(target) {
+        const topbarHeight = 61; // reader-topbar (59px) + progress-track (2px)
+        const lineHeightPx = parseFloat(getComputedStyle(target).lineHeight);
+        const linesFromTop = 7.5;
+        const offset = topbarHeight + lineHeightPx * linesFromTop;
+        const targetY = target.getBoundingClientRect().top + window.scrollY - offset;
+        window.scrollTo({ top: Math.max(0, targetY), behavior: 'smooth' });
+    }
+
     // ============================================================
     // ЗАКЛАДКИ
     // ============================================================
@@ -2047,7 +2130,7 @@
         list.querySelectorAll('.info').forEach(elm => {
             elm.addEventListener('click', () => {
                 const target = document.getElementById(elm.dataset.id);
-                if (target) { target.scrollIntoView({ behavior: 'smooth', block: 'center' }); closeBookmarksPanel(); }
+                if (target) { scrollToParagraph(target); closeBookmarksPanel(); }
             });
         });
         list.querySelectorAll('.delete-btn').forEach(btn => {
@@ -2196,6 +2279,169 @@
     $('tocToggle').addEventListener('click', openTOC);
     $('tocClose').addEventListener('click', closeTOC);
     $('tocOverlay').addEventListener('click', closeTOC);
+
+    // ============================================================
+    // ПОИСК ПО КНИГЕ — литеральный substring-поиск, без AI и без сети.
+    // «Оригинал» ищем в файле B, но он нигде на экране не отрисован (в DOM
+    // есть только p-N для файла A — см. renderBook/ALL_PARAGRAPHS), поэтому
+    // результат из B открываем в обычной модалке (как уже делает кнопка
+    // «📄 Оригинал» на панели выделения), а не скроллим к несуществующему узлу.
+    // ============================================================
+    const SEARCH_BATCH = 30;
+    const SEARCH_SNIPPET_CTX = 60;
+    let searchResultsAll = [];
+    let searchRenderedCount = 0;
+    let searchObserver = null;
+    let currentSearchMode = 'a';
+    let searchDebounceTimer = null;
+
+    function highlightMatch(text, pos, qLen, ctx) {
+        const start = Math.max(0, pos - ctx);
+        const end = Math.min(text.length, pos + qLen + ctx);
+        const before = escapeHtml(text.slice(start, pos));
+        const match = escapeHtml(text.slice(pos, pos + qLen));
+        const after = escapeHtml(text.slice(pos + qLen, end));
+        return (start > 0 ? '…' : '') + before + '<mark>' + match + '</mark>' + after + (end < text.length ? '…' : '');
+    }
+
+    // Возвращает [{paragraphId, chapterTitle, snippetHtml, fullHtml, source}].
+    // paragraphId есть только для источника A — единственного, что реально
+    // отрисовано в #bookContent (индекс абзаца считаем так же, как renderBook).
+    function performSearch(query, mode) {
+        const q = query.trim();
+        if (q.length < 2) return [];
+        const needle = q.toLowerCase();
+        const results = [];
+        function scan(chapters, source, withParagraphId) {
+            if (!chapters) return;
+            let idx = 0;
+            chapters.forEach((ch, ci) => {
+                const chapterTitle = (ch.title && ch.title.trim()) || ('Часть ' + (ci + 1));
+                ch.paragraphs.forEach(text => {
+                    const pos = text.toLowerCase().indexOf(needle);
+                    if (pos !== -1) {
+                        results.push({
+                            paragraphId: withParagraphId ? ('p-' + idx) : null,
+                            chapterTitle,
+                            snippetHtml: highlightMatch(text, pos, q.length, SEARCH_SNIPPET_CTX),
+                            fullHtml: highlightMatch(text, pos, q.length, Infinity),
+                            source,
+                        });
+                    }
+                    idx++;
+                });
+            });
+        }
+        if (mode === 'a' || mode === 'both') scan(slots.A.parsed && slots.A.parsed.chapters, 'Перевод', true);
+        if ((mode === 'b' || mode === 'both') && READER.hasOriginal) scan(slots.B.parsed && slots.B.parsed.chapters, 'Оригинал', false);
+        return results;
+    }
+
+    function goToSearchResult(r) {
+        closeSearch();
+        if (r.paragraphId) {
+            const el = document.getElementById(r.paragraphId);
+            if (!el) return;
+            scrollToParagraph(el);
+            el.classList.add('search-highlight');
+            setTimeout(() => el.classList.remove('search-highlight'), 1600);
+        } else {
+            // Оригинал не на экране — показываем найденный абзац в модалке
+            openModal('📄 ' + r.chapterTitle, `<div class="comment-text">${r.fullHtml}</div>`);
+        }
+    }
+
+    function renderSearchResultsBatch() {
+        const container = $('searchResults');
+        const batch = searchResultsAll.slice(searchRenderedCount, searchRenderedCount + SEARCH_BATCH);
+        const frag = document.createDocumentFragment();
+        batch.forEach(r => {
+            const card = document.createElement('div');
+            card.className = 'search-result';
+            card.innerHTML = `
+                <div class="chapter">
+                    <span>${escapeHtml(r.chapterTitle)}</span>
+                    ${currentSearchMode === 'both' ? `<span class="source-tag">${escapeHtml(r.source)}</span>` : ''}
+                </div>
+                <div class="snippet">${r.snippetHtml}</div>
+            `;
+            card.addEventListener('click', () => goToSearchResult(r));
+            frag.appendChild(card);
+        });
+        const oldSentinel = document.getElementById('searchSentinel');
+        if (oldSentinel) oldSentinel.remove();
+        container.appendChild(frag);
+        searchRenderedCount += batch.length;
+        if (searchRenderedCount < searchResultsAll.length) {
+            const sentinel = document.createElement('div');
+            sentinel.id = 'searchSentinel';
+            sentinel.className = 'search-sentinel';
+            container.appendChild(sentinel);
+            if (searchObserver) searchObserver.disconnect();
+            searchObserver = new IntersectionObserver(entries => {
+                if (entries[0].isIntersecting) renderSearchResultsBatch();
+            }, { root: $('searchPanel') });   // прокручивается .search-panel, не #searchResults — у него нет своего overflow
+            searchObserver.observe(sentinel);
+        }
+    }
+
+    function runSearch() {
+        if (searchObserver) { searchObserver.disconnect(); searchObserver = null; }
+        const q = $('searchInput').value;
+        const container = $('searchResults');
+        searchRenderedCount = 0;
+        if (q.trim().length < 2) {
+            searchResultsAll = [];
+            container.innerHTML = q.trim().length
+                ? '<div class="search-hint">Ещё хотя бы один символ…</div>'
+                : '<div class="search-hint">Введите не меньше двух символов.</div>';
+            return;
+        }
+        searchResultsAll = performSearch(q, currentSearchMode);
+        container.innerHTML = '';
+        if (!searchResultsAll.length) {
+            container.innerHTML = '<div class="search-empty">Ничего не найдено.</div>';
+            return;
+        }
+        renderSearchResultsBatch();
+    }
+
+    $('searchInput').addEventListener('input', () => {
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = setTimeout(runSearch, 250);
+    });
+    $('searchModeSwitch').addEventListener('click', (e) => {
+        const btn = e.target.closest('.search-mode-btn');
+        if (!btn || btn.dataset.mode === currentSearchMode) return;
+        currentSearchMode = btn.dataset.mode;
+        $('searchModeSwitch').querySelectorAll('.search-mode-btn').forEach(b => b.classList.toggle('active', b === btn));
+        runSearch();
+    });
+
+    function openSearch() {
+        clearTimeout(searchDebounceTimer);
+        if (searchObserver) { searchObserver.disconnect(); searchObserver = null; }
+        $('searchInput').value = '';
+        searchResultsAll = [];
+        searchRenderedCount = 0;
+        $('searchResults').innerHTML = '<div class="search-hint">Введите не меньше двух символов.</div>';
+        currentSearchMode = READER.hasOriginal ? 'both' : 'a';
+        $('searchModeSwitch').style.display = READER.hasOriginal ? '' : 'none';
+        $('searchModeSwitch').querySelectorAll('.search-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === currentSearchMode));
+        setPanelsHidden(false);   // панель висит под топбаром — топбар должен быть на месте
+        $('searchOverlay').classList.add('open');
+        $('searchPanel').classList.add('open');
+        setTimeout(() => $('searchInput').focus(), 260);
+    }
+    function closeSearch() {
+        clearTimeout(searchDebounceTimer);
+        $('searchOverlay').classList.remove('open');
+        $('searchPanel').classList.remove('open');
+        $('searchInput').blur();
+    }
+    $('searchToggle').addEventListener('click', openSearch);
+    $('searchClose').addEventListener('click', closeSearch);
+    $('searchOverlay').addEventListener('click', closeSearch);
 
     // ============================================================
     // МОДАЛКА
