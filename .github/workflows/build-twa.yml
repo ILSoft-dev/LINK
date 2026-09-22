@@ -102,6 +102,17 @@ jobs:
         working-directory: android
         run: |
           MANIFEST="app/src/main/AndroidManifest.xml"
+          # Bubblewrap сам прописывает android:allowBackup (обычно "true") в
+          # сгенерированном манифесте. Раньше мы просто ДОБАВЛЯЛИ свою пару
+          # атрибутов после <application>, не проверяя, что там уже есть —
+          # получались ДВА android:allowBackup на одном теге (invalid XML,
+          # ManifestMerger2 падает на разборе). Сначала вычищаем любые
+          # существующие вхождения обоих атрибутов (с любым значением), потом
+          # вставляем свою единственную пару.
+          sed -i -E \
+            -e 's/[[:space:]]*android:allowBackup="[^"]*"//g' \
+            -e 's/[[:space:]]*android:usesCleartextTraffic="[^"]*"//g' \
+            "$MANIFEST"
           # Bubblewrap может сгенерировать <application ...> с атрибутами на
           # разных строках, а не в одну — поэтому ищем сам открывающий тег
           # без требования пробела сразу после него (сработает что с пробелом,
@@ -111,9 +122,12 @@ jobs:
             "$MANIFEST"
           echo "--- проверка (многострочно, не должна ронять шаг, если не найдёт) ---"
           tr '\n' ' ' < "$MANIFEST" | grep -o '<application[^>]*>' || echo "(тег не показан одной строкой — не критично, ниже прямая проверка атрибутов)"
-          echo "--- прямая проверка, что атрибуты реально вставлены ---"
+          echo "--- прямая проверка: должно быть РОВНО по одному вхождению каждого ---"
           grep -c 'usesCleartextTraffic="false"' "$MANIFEST"
           grep -c 'allowBackup="false"' "$MANIFEST"
+          echo "--- на всякий случай: убеждаемся, что дублей нет ---"
+          [ "$(grep -o 'android:allowBackup="[^"]*"' "$MANIFEST" | wc -l)" -eq 1 ] || { echo "::error::Найдено больше одного android:allowBackup — манифест будет невалиден"; exit 1; }
+          [ "$(grep -o 'android:usesCleartextTraffic="[^"]*"' "$MANIFEST" | wc -l)" -eq 1 ] || { echo "::error::Найдено больше одного android:usesCleartextTraffic — манифест будет невалиден"; exit 1; }
 
       - name: Build APK
         working-directory: android
