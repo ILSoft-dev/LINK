@@ -102,11 +102,18 @@ jobs:
         working-directory: android
         run: |
           MANIFEST="app/src/main/AndroidManifest.xml"
+          # Bubblewrap может сгенерировать <application ...> с атрибутами на
+          # разных строках, а не в одну — поэтому ищем сам открывающий тег
+          # без требования пробела сразу после него (сработает что с пробелом,
+          # что с переносом строки следом).
           sed -i \
-            -e 's#<application #<application android:usesCleartextTraffic="false" android:allowBackup="false" #' \
+            -e 's#<application#<application android:usesCleartextTraffic="false" android:allowBackup="false"#' \
             "$MANIFEST"
-          echo "--- <application ...> в AndroidManifest.xml ---"
-          grep -o '<application[^>]*>' "$MANIFEST"
+          echo "--- проверка (многострочно, не должна ронять шаг, если не найдёт) ---"
+          tr '\n' ' ' < "$MANIFEST" | grep -o '<application[^>]*>' || echo "(тег не показан одной строкой — не критично, ниже прямая проверка атрибутов)"
+          echo "--- прямая проверка, что атрибуты реально вставлены ---"
+          grep -c 'usesCleartextTraffic="false"' "$MANIFEST"
+          grep -c 'allowBackup="false"' "$MANIFEST"
 
       - name: Build APK
         working-directory: android
