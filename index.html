@@ -682,7 +682,7 @@
         <div class="panel-header"><span>🔍 Поиск по книге</span><button class="close-btn" id="searchClose">✕</button></div>
         <input type="text" id="searchInput" class="search-input" placeholder="Что ищем?" autocomplete="off" autocorrect="off" spellcheck="false">
         <div class="search-mode-switch" id="searchModeSwitch" style="display:none">
-            <button type="button" class="search-mode-btn" data-mode="a">Перевод</button>
+            <button type="button" class="search-mode-btn" data-mode="a">Текст</button>
             <button type="button" class="search-mode-btn" data-mode="b">Оригинал</button>
             <button type="button" class="search-mode-btn" data-mode="both">Оба</button>
         </div>
@@ -2967,27 +2967,33 @@
         const c = chapterOfParagraph[idx];
         const from = c >= 0 ? (chapterFirstParagraph[c] || 0) : 0;
         const nextStart = chapterFirstParagraph[c + 1];
-        const to = Number.isInteger(nextStart) ? nextStart - 1 : ALL_PARAGRAPHS.length - 1;
+        const chapterEnd = Number.isInteger(nextStart) ? nextStart - 1 : ALL_PARAGRAPHS.length - 1;
+        // Хвост главы после idx ещё не прочитан — обрезаем ровно на текущем
+        // абзаце, иначе конец главы (не увиденный читателем) уедет в запрос
+        // как будто уже прочитанный, и «Ранее» заспойлерит остаток главы.
+        const to = Math.min(idx, chapterEnd);
         return { from, to, chapter: c };
     }
     // Ответ модели — строго в двух блоках (см. промпт ниже), чтобы не городить
     // JSON-парсинг поверх LLM: «ТЕКУЩЕЕ:» — пункты для показа читателю,
     // «НЕЗАКРЫТО:» — новый список взамен старого целиком.
+    // «ТЕКУЩЕЕ» теперь один абзац прозой (три-четыре фразы), не список пунктов —
+    // склеиваем его переносы строк в одну строку. «НЕЗАКРЫТО» остаётся списком.
     function parseRecapResponse(raw) {
         const marker = /незакрыто\s*:/i;
         const m = marker.exec(raw);
         const currentBlock = (m ? raw.slice(0, m.index) : raw).replace(/^\s*текущее\s*:/i, '');
         const unresolvedBlock = m ? raw.slice(m.index).replace(marker, '') : '';
-        const toBullets = (block) => block.split('\n')
+        const current = currentBlock.split('\n').map(l => l.trim()).filter(Boolean).join(' ');
+        const unresolved = unresolvedBlock.split('\n')
             .map(line => line.replace(/^[\s•\-*]+/, '').trim())
-            .filter(Boolean);
-        return { current: toBullets(currentBlock), unresolved: toBullets(unresolvedBlock).slice(0, 5) };
+            .filter(Boolean)
+            .slice(0, 5);
+        return { current, unresolved };
     }
-    function renderRecapModal(bullets) {
-        const list = bullets.length
-            ? '<ul style="margin:0;padding-left:1.2rem;">' + bullets.map(b => `<li style="margin-bottom:.5rem;">${escapeHtml(b)}</li>`).join('') + '</ul>'
-            : '<div class="comment-text">Пусто.</div>';
-        openModal('📖 Ранее в книге', list);
+    function renderRecapModal(paragraph) {
+        const body = paragraph ? `<div class="comment-text">${escapeHtml(paragraph)}</div>` : '<div class="comment-text">Пусто.</div>';
+        openModal('📖 Ранее в книге', body);
     }
 
     // Раньше здесь был прямой запрос на api.groq.com — но Groq геоблокирует
@@ -3047,20 +3053,24 @@
     }
 
     // Лёгкое запоминание в памяти (не в хранилище) — чтобы повторный клик без
-    // смены главы не дёргал API второй раз подряд впустую. То, что реально
-    // персистится (READER.recap: unresolved/chapterCovered/generatedAt) —
+    // движения не дёргал API второй раз подряд впустую. Ключ кэша — именно
+    // «to» (последний реально отправленный абзац), а не номер главы: глава
+    // теперь обрезается по месту чтения (см. getChapterRange), и внутри той
+    // же главы после дочитывания ещё нескольких абзацев отправлять надо уже
+    // больше текста — старую врезку в этом случае показывать нельзя. То, что
+    // реально персистится (READER.recap: unresolved/chapterCovered/generatedAt) —
     // не текст для показа, а рабочее состояние для СЛЕДУЮЩЕЙ генерации и
     // для экспорта/импорта, см. вкладку ТЗ.
-    let lastRecapChapter = -2;
-    let lastRecapBullets = null;
+    let lastRecapTo = -2;
+    let lastRecapText = null;
 
     async function generateRecap() {
         const currentIdx = getCurrentParagraphIndex();
         if (currentIdx < 0) { openModal('Ранее в книге', 'Прочитайте хотя бы несколько абзацев.'); return; }
 
         const { from, to, chapter } = getChapterRange(currentIdx);
-        if (chapter === lastRecapChapter && lastRecapBullets) {
-            renderRecapModal(lastRecapBullets);
+        if (to === lastRecapTo && lastRecapText) {
+            renderRecapModal(lastRecapText);
             return;
         }
 
@@ -3076,30 +3086,45 @@
                 ? `\n\nРанее было отмечено как незакрытое (часть могла разрешиться в этой главе — не переноси разрешённое дальше):\n${prevUnresolved.map(u => '- ' + u).join('\n')}\n`
                 : '';
 
-            const prompt = `Читатель книги ${bookLabel} возвращается к чтению после паузы и хочет короткое напоминание «что было», а не пересказ всей книги.
+            const prompt = `Читатель книги ${bookLabel} возвращается после паузы. Ему нужно услышать три-четыре фразы и сразу читать дальше. Не пересказ книги и не разбор.
 
-Последняя прочитанная им глава целиком:
+Ниже только то, что он уже прочитал. Текста после этого места ты не видишь и не додумываешь.
 ---
 ${chapterText}
 ---
 ${unresolvedBlock}
-Ответь СТРОГО в этом формате, без вступлений и заключений, на языке текста:
+Напиши врезку по правилам:
+
+- Три или четыре предложения, один абзац, прошлое время.
+- Одна сцена: на чём он остановился. Одна конкретная деталь из текста, без прилагательных вроде «мрачный», «тревожный», «атмосфера недоверия».
+- Имена только те, без которых следующая страница непонятна, и только внутри действия. Не перечисляй действующих лиц строкой.
+- Уже разрешённое выкини. Если ниже дан старый список незакрытого и в прочитанном тексте это закрылось — не тащи дальше.
+- Последняя фраза — то, что ещё не кончилось, сказанное как сцена, а не как тема. Нельзя: «неясно», «неизвестно», «остаётся вопрос», «возможные последствия», «дальнейшие угрозы».
+- Не цитируй длинно, не обращайся к читателю, не обещай, что будет дальше.
+
+Образец ритма, не содержания:
+Плохо: «Сцена в лагере. Анна, Марк, Илья. Неясно, погас ли пожар. Остаётся вопрос о последствиях.»
+Хорошо: «К ночи пожар у лагеря уже сел, и Анна всё ещё не отпускала Марка от костра. Илья ушёл считать оставшихся и не вернулся. В золе лежала чужая куртка, хотя своих не хватало только одного.»
+
+Ответь строго в этом формате, без текста до и после:
 
 ТЕКУЩЕЕ:
-- (5–6 коротких пунктов: на какой сцене читатель остановился; какие действующие лица сейчас в игре — только имена, без описаний; что осталось не закрыто — договор, угроза, ложь, дорога и т.п. Без атмосферы, без «главной интриги с первой главы», без уже разрешённого.)
+абзац врезки
 
 НЕЗАКРЫТО:
-- (обновлённый короткий список того, что не закрыто к концу ЭТОЙ главы, не больше 5 пунктов — только то, что ещё актуально)`;
+- до пяти коротких пунктов о том, что к концу этого куска ещё не закрыто
+- пункт — факт, не фраза для чтения вслух
+- уже разрешённое не переноси`;
 
             const raw = await callLLM([
-                { role: 'system', content: 'Ты — внимательный литературный ассистент. Отвечаешь строго по запрошенному формату, на языке предложенного текста.' },
+                { role: 'system', content: 'Ты пишешь вслух короткую врезку «ранее в книге» — ту, что читатель слышит перед тем, как продолжить. Не критик, не конспект, не список тезисов. Только то, что уже есть в данном тексте. Дальше этого текста не заглядываешь и ничего не выдумываешь. Отвечаешь на языке текста и строго в запрошенном формате.' },
                 { role: 'user', content: prompt }
             ], 900);
 
             const { current, unresolved } = parseRecapResponse(raw);
 
-            lastRecapChapter = chapter;
-            lastRecapBullets = current;
+            lastRecapTo = to;
+            lastRecapText = current;
 
             READER.recap = { unresolved, chapterCovered: chapter, generatedAt: Date.now() };
             bookSave('recap', JSON.stringify(READER.recap));
