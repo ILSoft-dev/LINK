@@ -441,6 +441,33 @@
     .toc-item .title{ flex:1; }
     .toc-item .status{ font-variant-numeric:tabular-nums; color:var(--text-soft); font-size:.78rem; white-space:nowrap; }
 
+    /* ===== Метка «Материалы» на абзаце — НЕ кружок закладки, тот в
+       ::before на этом же элементе. Меньше, тем же акцентом, рядом. Когда
+       оба знака на одном абзаце — сдвигаем метку материалов правее, чтобы
+       не наложились. */
+    .book-content p.has-materials::after{
+        content:''; position:absolute;
+        left:calc(var(--p-indent, 1.4rem) / 2 - 2px); top:0.65em;
+        width:4px; height:4px; border-radius:1px; background:var(--accent);
+    }
+    .book-content p.bookmarked.has-materials::after{ left:calc(var(--p-indent, 1.4rem) / 2 + 4px); }
+
+    /* ===== Панель «Материалы» — тот же слайд-ин слева, что и у оглавления ===== */
+    .materials-chapter{
+        font-family:'Inter',sans-serif; font-size:.72rem; text-transform:uppercase;
+        letter-spacing:.04em; color:var(--accent); margin:1.2rem 0 .5rem;
+    }
+    .materials-chapter:first-child{ margin-top:0; }
+    .materials-item{
+        padding:.8rem 0; border-bottom:1px solid var(--border); cursor:pointer;
+    }
+    .materials-quote{ font-style:italic; font-size:.9rem; margin-bottom:.3rem; }
+    .materials-field{
+        font-family:'Inter',sans-serif; font-size:.8rem; color:var(--text-soft);
+        margin-top:.2rem;
+    }
+    .materials-choice.active{ outline:2px solid var(--accent); outline-offset:1px; }
+
     /* ===== Поиск по книге — оверлей под топбаром, не боковая панель и не bottom sheet ===== */
     .search-overlay{ position:fixed; inset:0; background:rgba(20,16,12,.4); z-index:139; display:none; }
     .search-overlay.open{ display:block; }
@@ -568,6 +595,9 @@
             <button id="backBtn" class="round-btn" title="К загрузке">←</button>
             <div class="chapter-indicator" id="chapterIndicator"></div>
             <button id="tocToggle" class="round-btn" title="Оглавление">☰</button>
+            <button id="materialsToggle" class="round-btn" title="Материалы по книге" style="display:none;">
+                <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6h4"/><path d="M2 10h4"/><path d="M2 14h4"/><path d="M2 18h4"/><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9.5 8h5"/><path d="M9.5 12H16"/><path d="M9.5 16H14"/></svg>
+            </button>
             <button id="searchToggle" class="round-btn" title="Поиск по книге">
                 <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
             </button>
@@ -652,11 +682,18 @@
         <div class="panel-header"><span>🔍 Поиск по книге</span><button class="close-btn" id="searchClose">✕</button></div>
         <input type="text" id="searchInput" class="search-input" placeholder="Что ищем?" autocomplete="off" autocorrect="off" spellcheck="false">
         <div class="search-mode-switch" id="searchModeSwitch" style="display:none">
-            <button type="button" class="search-mode-btn" data-mode="a">Текст</button>
+            <button type="button" class="search-mode-btn" data-mode="a">Перевод</button>
             <button type="button" class="search-mode-btn" data-mode="b">Оригинал</button>
             <button type="button" class="search-mode-btn" data-mode="both">Оба</button>
         </div>
         <div id="searchResults"></div>
+    </div>
+
+    <!-- ПАНЕЛЬ МАТЕРИАЛОВ -->
+    <div class="toc-overlay" id="materialsOverlay"></div>
+    <div class="toc-panel" id="materialsPanel">
+        <div class="panel-header"><span>📝 Материалы</span><button class="close-btn" id="materialsClose">✕</button></div>
+        <div id="materialsList"><div class="empty-msg">Материалов пока нет</div></div>
     </div>
 
     <!-- ПАНЕЛЬ ОФОРМЛЕНИЯ -->
@@ -685,7 +722,7 @@
         <div class="panel-header"><span>Ассистент</span><button class="close-btn" id="assistantClose">✕</button></div>
         <button type="button" class="ai-item" id="assistantSummaryItem">
             <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15.5 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z"/><path d="M15 3v6h6"/><path d="M10 13h4"/><path d="M10 17h4"/></svg>
-            <div><div class="ai-name">Саммари</div><div class="ai-desc">Краткий пересказ прочитанного до этого места</div></div>
+            <div><div class="ai-name">Ранее в книге</div><div class="ai-desc">На чём остановились и что не закрыто — по последней прочитанной главе</div></div>
         </button>
         <button type="button" class="ai-item" id="assistantAskItem">
             <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>
@@ -705,7 +742,7 @@
             <p style="font-size:.75rem;opacity:.7;margin:.3rem 0 .9rem;">Получить: <a href="https://console.groq.com" target="_blank" style="color:var(--accent);">console.groq.com</a></p>
             <button class="btn-primary" id="apiKeySaveBtn">Сохранить</button>
         </div>
-        <div class="ai-key-hint" id="assistantKeyHint" style="display:none;">Для саммари и вопросов нужен хотя бы один ключ — откройте пункт «Ключ API» выше.</div>
+        <div class="ai-key-hint" id="assistantKeyHint" style="display:none;">Для «Ранее в книге» и вопросов нужен хотя бы один ключ — откройте пункт «Ключ API» выше.</div>
     </div>
 
     <!-- МОДАЛКА -->
@@ -721,6 +758,7 @@
         <div class="st-inner">
             <button id="selectionCommentBtn">💬 Комментарий</button>
             <button id="selectionAskBtn">❓ Вопрос</button>
+            <button id="selectionNoteBtn">📝 Заметка</button>
             <button id="selectionOriginalBtn" style="display:none;">📄 Оригинал</button>
         </div>
     </div>
@@ -1402,7 +1440,8 @@
         hasOriginal: false,
         originalChapters: null,    // [{title, paragraphs}] или null
         bookmarks: [],
-        summaryHistory: [],
+        recap: null,   // { unresolved: [...], chapterCovered, generatedAt } | null — см. «Ранее в книге»
+        materials: [], // [{id, quote, chapter, note?, comment?, question?, answer?, original?, timestamp}] — см. «Материалы по книге»
         furthestScrollBottom: 0,
     };
     let ALL_PARAGRAPHS = [];
@@ -1609,7 +1648,7 @@
     // в localStorage под «bookKey:поле», так что экспорт — сериализация того,
     // что уже хранится. Импорт только добавляет: локальное не затирается.
     const LINK_EXPORT_VERSION = 1;
-    const BOOK_STATE_JSON_FIELDS = ['bookmarks', 'summaryHistory'];
+    const BOOK_STATE_JSON_FIELDS = ['bookmarks', 'recap', 'materials'];
     const BOOK_STATE_NUMBER_FIELDS = ['furthestScrollBottom', 'lastScrollTop'];
 
     function readBookState(bookKey) {
@@ -1719,10 +1758,37 @@
             timestamp: Number(b.timestamp) || 0,
         }));
     }
-    function sanitizeSummaryHistory(list) {
+    const MATERIALS_LIMIT = 80;
+    const MATERIAL_TEXT_FIELDS = ['note', 'comment', 'question', 'answer', 'original'];
+    // Карточка материалов извне — тот же принцип, что и у закладок: id вида
+    // p-N, только известные текстовые поля, остальное отбрасываем молча.
+    function sanitizeMaterialCard(c) {
+        if (!c || typeof c.id !== 'string' || !/^p-\d+$/.test(c.id)) return null;
+        if (typeof c.quote !== 'string' || !c.quote) return null;
+        const card = {
+            id: c.id,
+            quote: c.quote,
+            chapter: typeof c.chapter === 'string' ? c.chapter : '',
+            timestamp: Number(c.timestamp) || 0,
+        };
+        MATERIAL_TEXT_FIELDS.forEach(f => { if (typeof c[f] === 'string' && c[f]) card[f] = c[f]; });
+        return card;
+    }
+    function sanitizeMaterials(list) {
         if (!Array.isArray(list)) return [];
-        return list.filter(s => s && typeof s.summary === 'string')
-            .map(s => ({ timestamp: Number(s.timestamp) || 0, summary: s.summary }));
+        return list.map(sanitizeMaterialCard).filter(Boolean);
+    }
+    // recap — не список, а единое текущее состояние сюжета (см. «Ранее в книге»)
+    function sanitizeRecap(v) {
+        if (!v || typeof v !== 'object') return null;
+        if (!Array.isArray(v.unresolved)) return null;
+        const chapterCovered = Number(v.chapterCovered);
+        if (!Number.isFinite(chapterCovered)) return null;
+        return {
+            unresolved: v.unresolved.filter(u => typeof u === 'string').slice(0, 5),
+            chapterCovered,
+            generatedAt: Number(v.generatedAt) || 0,
+        };
     }
     function parseStoredJSON(raw, fallback) {
         try { const v = JSON.parse(raw); return v == null ? fallback : v; } catch (e) { return fallback; }
@@ -1742,14 +1808,38 @@
             safeStorage.setItem(k('bookmarks'), JSON.stringify(localBookmarks.concat(addedBookmarks)));
         }
 
-        // Саммари: union без дублей, по времени, последние 10 (как в generateSummary)
-        const localHistory = sanitizeSummaryHistory(parseStoredJSON(safeStorage.getItem(k('summaryHistory')), []));
-        const sig = s => s.timestamp + '\u0000' + s.summary;
-        const known = new Set(localHistory.map(sig));
-        const addedHistory = sanitizeSummaryHistory(imported.summaryHistory).filter(s => !known.has(sig(s)) && known.add(sig(s)));
-        if (addedHistory.length) {
-            const merged = localHistory.concat(addedHistory).sort((a, b) => a.timestamp - b.timestamp).slice(-10);
-            safeStorage.setItem(k('summaryHistory'), JSON.stringify(merged));
+        // Материалы: слияние по id абзаца, поле за полем — своё не затираем
+        // чужим (заполненное локальное поле остаётся, пустое — принимает
+        // импортированное). Новых карточек добавляем, пока не упёрлись в
+        // лимит (лишние молча пропускаем — это перенос между устройствами,
+        // спрашивать пользователя не у кого).
+        const localMaterials = sanitizeMaterials(parseStoredJSON(safeStorage.getItem(k('materials')), []));
+        const localByParagraph = new Map(localMaterials.map(c => [c.id, c]));
+        let materialsChanged = false;
+        sanitizeMaterials(imported.materials).forEach(incoming => {
+            const existing = localByParagraph.get(incoming.id);
+            if (existing) {
+                MATERIAL_TEXT_FIELDS.forEach(f => {
+                    if (!existing[f] && incoming[f]) { existing[f] = incoming[f]; materialsChanged = true; }
+                });
+                if (incoming.timestamp > existing.timestamp) existing.timestamp = incoming.timestamp;
+            } else if (localMaterials.length < MATERIALS_LIMIT) {
+                localMaterials.push(incoming);
+                localByParagraph.set(incoming.id, incoming);
+                materialsChanged = true;
+            }
+        });
+        if (materialsChanged) safeStorage.setItem(k('materials'), JSON.stringify(localMaterials));
+
+        // recap: не список для слияния, а единое состояние сюжета — побеждает
+        // запись с бо́льшим chapterCovered (при равенстве — более новый generatedAt)
+        const importedRecap = sanitizeRecap(imported.recap);
+        if (importedRecap) {
+            const localRecap = sanitizeRecap(parseStoredJSON(safeStorage.getItem(k('recap')), null));
+            const importedWins = !localRecap
+                || importedRecap.chapterCovered > localRecap.chapterCovered
+                || (importedRecap.chapterCovered === localRecap.chapterCovered && importedRecap.generatedAt > localRecap.generatedAt);
+            if (importedWins) safeStorage.setItem(k('recap'), JSON.stringify(importedRecap));
         }
 
         // Самое дальнее место: max — прогресс не откатывается
@@ -1905,7 +1995,8 @@
 
         // Восстанавливаем состояние именно ЭТОЙ книги
         READER.bookmarks = JSON.parse(bookLoad('bookmarks') || '[]');
-        READER.summaryHistory = JSON.parse(bookLoad('summaryHistory') || '[]');
+        READER.recap = JSON.parse(bookLoad('recap') || 'null');
+        READER.materials = JSON.parse(bookLoad('materials') || '[]');
         READER.furthestScrollBottom = parseInt(bookLoad('furthestScrollBottom')) || 0;
         READER.lastScrollTop = parseInt(bookLoad('lastScrollTop')) || 0;
 
@@ -1913,6 +2004,7 @@
         ALL_PARAGRAPHS = Array.from(document.querySelectorAll('#bookContent p[id^="p-"]'));
         buildChapterIndex();
         renderBookmarks();
+        syncMaterialsMarks();
         applyFontSize();
 
         // Кнопка "Оригинал" в тулбаре выделения доступна только если файл B загружен и выбран LINK
@@ -1977,6 +2069,7 @@
         closeBookmarksPanel();
         closeTOC();
         closeSearch();
+        closeMaterialsPanel();
         closeTypePanel();
         closeAssistantPanel();
     });
@@ -2229,6 +2322,219 @@
     $('bookmarksClose').addEventListener('click', closeBookmarksPanel);
 
     // ============================================================
+    // МАТЕРИАЛЫ ПО КНИГЕ — конспект трудных мест, одна карточка на абзац
+    // ============================================================
+    function findMaterialCard(paragraphId) {
+        return READER.materials.find(c => c.id === paragraphId) || null;
+    }
+    function saveMaterials() { bookSave('materials', JSON.stringify(READER.materials)); }
+
+    function syncMaterialsMarks() {
+        document.querySelectorAll('#bookContent p.has-materials').forEach(p => p.classList.remove('has-materials'));
+        READER.materials.forEach(c => {
+            const el = document.getElementById(c.id);
+            if (el) el.classList.add('has-materials');
+        });
+        $('materialsToggle').style.display = READER.materials.length ? '' : 'none';
+        if ($('materialsPanel').classList.contains('open')) renderMaterialsPanel();
+    }
+
+    function truncateText(s, n) { return s.length > n ? s.slice(0, n) + '…' : s; }
+
+    // Кнопки «Оставить здесь» / «Закрыть» — добавляются в уже открытую модалку
+    // с результатом (комментарий/вопрос-с-отрывком/оригинал), либо в модалку
+    // заметки. Сама модалка при этом не трогается — кнопки дописываются в конец.
+    function appendMaterialsSaveBar(onSave) {
+        const bar = document.createElement('div');
+        bar.style.cssText = 'display:flex;gap:.5rem;margin-top:1rem;border-top:1px solid var(--border);padding-top:.9rem;';
+        bar.innerHTML = `
+            <button class="btn-primary" id="materialsSaveBtn" style="flex:1;margin-top:0;">Оставить здесь</button>
+            <button class="btn-primary" id="materialsCloseBtn" style="flex:1;margin-top:0;background:var(--bg-soft);color:var(--text);">Закрыть</button>
+        `;
+        $('modalBody').appendChild(bar);
+        $('materialsSaveBtn').addEventListener('click', onSave);
+        $('materialsCloseBtn').addEventListener('click', closeModal);
+    }
+
+    const MATERIAL_FIELD_LABELS = { note: 'Заметка', comment: 'Комментарий', original: 'Оригинал', question: 'Вопрос и ответ' };
+
+    // Точка сохранения для всех четырёх триггеров (заметка/комментарий/вопрос/
+    // оригинал). fieldKey — 'note'|'comment'|'original'|'question' (для
+    // 'question' newExtra — ответ, поле хранится парой question+answer).
+    // Цитата — общая на карточку: второе выделение того же абзаца её
+    // заменяет только по подтверждению (см. вкладку ТЗ, «Уточнение»).
+    function offerSaveToMaterials(paragraphId, fieldKey, quote, newValue, newExtra) {
+        const existing = findMaterialCard(paragraphId);
+        const quoteChanged = !!existing && existing.quote !== quote;
+        let fieldChanged = false;
+        if (existing) {
+            fieldChanged = fieldKey === 'question'
+                ? ((existing.question && existing.question !== newValue) || (existing.answer && existing.answer !== newExtra))
+                : (!!existing[fieldKey] && existing[fieldKey] !== newValue);
+        }
+
+        function commit(keepNewQuote, keepNewField) {
+            let card = findMaterialCard(paragraphId);
+            if (!card) {
+                if (READER.materials.length >= MATERIALS_LIMIT) {
+                    openModal('Материалы', `Место в материалах этой книги кончилось (лимит ${MATERIALS_LIMIT} карточек). Удалите что-нибудь в «Материалах», чтобы освободить место — само ничего не убираем.`);
+                    return;
+                }
+                card = { id: paragraphId, quote, chapter: getChapterForId(paragraphId), timestamp: Date.now() };
+                READER.materials.push(card);
+            }
+            if (keepNewQuote) card.quote = quote;
+            card.chapter = getChapterForId(paragraphId);
+            card.timestamp = Date.now();
+            if (keepNewField) {
+                if (fieldKey === 'question') { card.question = newValue; card.answer = newExtra; }
+                else card[fieldKey] = newValue;
+            }
+            saveMaterials();
+            syncMaterialsMarks();
+            closeModal();
+        }
+
+        if (!quoteChanged && !fieldChanged) { commit(true, true); return; }
+        renderMaterialsConflict({ quoteChanged, fieldChanged, existing, quote, fieldKey, newValue, newExtra, commit });
+    }
+
+    // Показываем старое/новое и даём выбрать — отдельно по цитате и/или по
+    // полю, если конфликтуют оба сразу (см. «Уточнение» в ТЗ — это не баг).
+    function renderMaterialsConflict({ quoteChanged, fieldChanged, existing, quote, fieldKey, newValue, newExtra, commit }) {
+        const choices = { quote: true, field: true };
+        let html = '<p style="margin-bottom:1rem;color:var(--text-soft);">Это место уже есть в материалах — что оставить?</p>';
+        if (quoteChanged) {
+            html += `
+                <div style="margin-bottom:1.2rem;">
+                    <div style="font-weight:700;color:var(--accent);margin-bottom:.4rem;">Цитата</div>
+                    <div style="background:var(--bg-soft);padding:.6rem;border-radius:8px;margin-bottom:.4rem;">${escapeHtml(existing.quote)}</div>
+                    <div style="background:var(--bg-soft);padding:.6rem;border-radius:8px;border:1px solid var(--accent);">${escapeHtml(quote)}</div>
+                    <div style="display:flex;gap:.5rem;margin-top:.5rem;">
+                        <button class="btn-primary materials-choice active" data-group="quote" data-choice="new" style="margin-top:0;flex:1;">Оставить новое</button>
+                        <button class="btn-primary materials-choice" data-group="quote" data-choice="old" style="margin-top:0;flex:1;background:var(--bg-soft);color:var(--text);">Оставить прежнее</button>
+                    </div>
+                </div>`;
+        }
+        if (fieldChanged) {
+            const label = MATERIAL_FIELD_LABELS[fieldKey];
+            const oldText = fieldKey === 'question' ? `${existing.question || ''}\n\n${existing.answer || ''}`.trim() : existing[fieldKey];
+            const newText = fieldKey === 'question' ? `${newValue}\n\n${newExtra}` : newValue;
+            html += `
+                <div style="margin-bottom:1.2rem;">
+                    <div style="font-weight:700;color:var(--accent);margin-bottom:.4rem;">${label}</div>
+                    <div style="background:var(--bg-soft);padding:.6rem;border-radius:8px;margin-bottom:.4rem;white-space:pre-wrap;">${escapeHtml(oldText)}</div>
+                    <div style="background:var(--bg-soft);padding:.6rem;border-radius:8px;border:1px solid var(--accent);white-space:pre-wrap;">${escapeHtml(newText)}</div>
+                    <div style="display:flex;gap:.5rem;margin-top:.5rem;">
+                        <button class="btn-primary materials-choice active" data-group="field" data-choice="new" style="margin-top:0;flex:1;">Оставить новое</button>
+                        <button class="btn-primary materials-choice" data-group="field" data-choice="old" style="margin-top:0;flex:1;background:var(--bg-soft);color:var(--text);">Оставить прежнее</button>
+                    </div>
+                </div>`;
+        }
+        html += '<button class="btn-primary" id="materialsConflictSave" style="width:100%;">Сохранить</button>';
+
+        $('modalTitle').textContent = 'Материалы — подтвердите замену';
+        $('modalBody').innerHTML = html;
+        $('modalBody').querySelectorAll('.materials-choice').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const group = btn.dataset.group;
+                choices[group] = btn.dataset.choice === 'new';
+                $('modalBody').querySelectorAll(`.materials-choice[data-group="${group}"]`).forEach(b => b.classList.toggle('active', b === btn));
+            });
+        });
+        $('materialsConflictSave').addEventListener('click', () => commit(choices.quote, choices.field));
+    }
+
+    function openMaterialCard(paragraphId) {
+        const card = findMaterialCard(paragraphId);
+        if (!card) return;
+        const rows = [];
+        if (card.note) rows.push(['Заметка', card.note]);
+        if (card.original) rows.push(['Оригинал', card.original]);
+        if (card.comment) rows.push(['Комментарий', card.comment]);
+        if (card.question) rows.push(['Вопрос', card.question]);
+        if (card.answer) rows.push(['Ответ', card.answer]);
+        const body = `
+            <div style="margin-bottom:1rem;">
+                <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem;">Цитата</div>
+                <div style="background:var(--bg-soft);padding:.7rem;border-radius:8px;font-style:italic;">${escapeHtml(card.quote)}</div>
+            </div>
+            ${rows.map(([label, text]) => `
+                <div style="margin-bottom:1rem;">
+                    <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem;">${label}</div>
+                    <div style="background:var(--bg-soft);padding:.7rem;border-radius:8px;white-space:pre-wrap;">${escapeHtml(text)}</div>
+                </div>`).join('')}
+            <button class="btn-primary" id="materialsDeleteBtn" style="width:100%;background:var(--bg-soft);color:#b3453a;">Удалить карточку</button>
+        `;
+        openModal('📝 ' + (card.chapter || 'Материал'), body);
+        $('materialsDeleteBtn').addEventListener('click', () => {
+            if (!confirm('Удалить эту карточку из материалов?')) return;
+            const idx = READER.materials.findIndex(c => c.id === paragraphId);
+            if (idx >= 0) READER.materials.splice(idx, 1);
+            saveMaterials();
+            syncMaterialsMarks();
+            closeModal();
+        });
+    }
+
+    // Тап по метке материала (в отступе абзаца, рядом с кружком закладки) —
+    // сама метка не своя DOM-нода (::after), поэтому ловим клик по абзацу и
+    // проверяем, что он пришёлся в зону отступа у первой строки, а не по
+    // тексту — иначе обычное выделение слов задевало бы карточку.
+    $('bookContent').addEventListener('click', (e) => {
+        const p = e.target.closest('p.has-materials');
+        if (!p) return;
+        const rect = p.getBoundingClientRect();
+        const indentPx = parseFloat(getComputedStyle(p).textIndent) || 0;
+        const lineHeightPx = parseFloat(getComputedStyle(p).lineHeight) || 24;
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        if (x >= 0 && x <= indentPx + 6 && y >= 0 && y <= lineHeightPx) openMaterialCard(p.id);
+    });
+
+    function renderMaterialsPanel() {
+        const list = $('materialsList');
+        if (!READER.materials.length) { list.innerHTML = '<div class="empty-msg">Материалов пока нет</div>'; return; }
+        // По главам, в порядке КНИГИ — сортируем по номеру абзаца, не по
+        // времени добавления карточки.
+        const sorted = READER.materials.slice().sort((a, b) => parseInt(a.id.slice(2)) - parseInt(b.id.slice(2)));
+        let html = '';
+        let lastChapter = null;
+        sorted.forEach(card => {
+            if (card.chapter !== lastChapter) {
+                html += `<div class="materials-chapter">${escapeHtml(card.chapter || '—')}</div>`;
+                lastChapter = card.chapter;
+            }
+            const fields = [];
+            if (card.note) fields.push(['Заметка', card.note]);
+            if (card.original) fields.push(['Оригинал', card.original]);
+            if (card.comment) fields.push(['Комментарий', card.comment]);
+            if (card.question) fields.push(['Вопрос', card.question]);
+            html += `
+                <div class="materials-item" data-id="${escapeAttr(card.id)}">
+                    <div class="materials-quote">${escapeHtml(truncateText(card.quote, 100))}</div>
+                    ${fields.map(([label, text]) => `<div class="materials-field"><b>${label}:</b> ${escapeHtml(truncateText(text, 100))}</div>`).join('')}
+                </div>`;
+        });
+        list.innerHTML = html;
+        list.querySelectorAll('.materials-item').forEach(elm => {
+            elm.addEventListener('click', () => {
+                const id = elm.dataset.id;
+                const target = document.getElementById(id);
+                closeMaterialsPanel();
+                if (target) scrollToParagraph(target);
+                openMaterialCard(id);   // если абзаца уже нет (target=null) — карточка всё равно открывается, просто без прокрутки
+            });
+        });
+    }
+
+    function openMaterialsPanel() { closeTOC(); renderMaterialsPanel(); $('materialsPanel').classList.add('open'); $('materialsOverlay').classList.add('open'); }
+    function closeMaterialsPanel() { $('materialsPanel').classList.remove('open'); $('materialsOverlay').classList.remove('open'); }
+    $('materialsToggle').addEventListener('click', openMaterialsPanel);
+    $('materialsClose').addEventListener('click', closeMaterialsPanel);
+    $('materialsOverlay').addEventListener('click', closeMaterialsPanel);
+
+    // ============================================================
     // ПАНЕЛЬ «ОФОРМЛЕНИЕ» и ПАНЕЛЬ «АССИСТЕНТ»
     // ============================================================
     function setSheet(panel, open) {
@@ -2259,7 +2565,7 @@
         $('assistantPanel').classList.contains('open') ? closeAssistantPanel() : openAssistantPanel();
     });
     $('assistantClose').addEventListener('click', closeAssistantPanel);
-    $('assistantSummaryItem').addEventListener('click', () => { closeAssistantPanel(); generateSummary(); });
+    $('assistantSummaryItem').addEventListener('click', () => { closeAssistantPanel(); generateRecap(); });
     $('assistantAskItem').addEventListener('click', () => { closeAssistantPanel(); askQuestion(); });
     $('assistantKeyItem').addEventListener('click', () => toggleAssistantKeyForm());
     ['shelfPanel','bookmarksPanel','typePanel','assistantPanel'].forEach(id => $(id).setAttribute('inert', ''));
@@ -2331,7 +2637,7 @@
             });
         });
     }
-    function openTOC() { renderTOC(); $('tocPanel').classList.add('open'); $('tocOverlay').classList.add('open'); }
+    function openTOC() { closeMaterialsPanel(); renderTOC(); $('tocPanel').classList.add('open'); $('tocOverlay').classList.add('open'); }
     function closeTOC() { $('tocPanel').classList.remove('open'); $('tocOverlay').classList.remove('open'); }
     $('tocToggle').addEventListener('click', openTOC);
     $('tocClose').addEventListener('click', closeTOC);
@@ -2519,12 +2825,12 @@
             <p style="margin-bottom:1rem;"><strong>«Читать»</strong> — открывает книгу без оригинала. <strong>LINK</strong> — открывает с оригиналом, добавляя сравнение отрывков.</p>
             <p style="margin-bottom:1rem;"><strong>В читалке:</strong> выделите слово или фразу — появятся «💬 Комментарий» (разбор отрывка), «❓ Вопрос» (вопрос по содержанию с этим отрывком как контекстом) и «📄 Оригинал» (если файл оригинала загружен).</p>
             <p style="margin-bottom:1rem;">Любую выезжающую панель (полка, закладки, оформление, ассистент) можно закрыть не только крестиком, но и тапом по области чтения рядом.</p>
-            <p style="margin-bottom:1rem;"><strong>Нижняя панель:</strong> «Аа» — размер шрифта, межстрочный интервал, поля страницы и абзацный отступ; «Метка» — закладка на видимый абзац; «Список» — все закладки; «ИИ» — саммари, свободный вопрос по содержанию и ввод ключа; «Голос» — чтение вслух.</p>
+            <p style="margin-bottom:1rem;"><strong>Нижняя панель:</strong> «Аа» — размер шрифта, межстрочный интервал, поля страницы и абзацный отступ; «Метка» — закладка на видимый абзац; «Список» — все закладки; «ИИ» — «Ранее в книге», свободный вопрос по содержанию и ввод ключа; «Голос» — чтение вслух.</p>
             <p style="margin-bottom:1rem;"><strong>☰ вверху</strong> — оглавление книги. Панели прячутся при скролле — потяните вверх, нажмите кружок в углу, чтобы вернуть, или используйте кнопки ▲/▼ для прокрутки без свайпов.</p>
             <p style="margin-bottom:1rem;"><strong>Тема</strong> (кнопка сверху) переключается по кругу: светлая → тёмная → monochrome ink.</p>
             <p style="margin-bottom:1rem;"><strong>Поиск</strong> (лупа вверху) идёт по тексту на экране. В режиме LINK — ещё и по второй версии. Совпадение из неё открывается в окне, страница не листается.</p>
             <p style="margin-bottom:1rem;">На полке <strong>«Экспорт»</strong> сохраняет книги, закладки и прогресс в JSON. <strong>«Импорт»</strong> добавляет: свои книги не затирает и не вытесняет. <strong>«Поделиться»</strong> отправляет этот JSON в другое приложение. Внутри полный текст книг, не только названия.</p>
-            <p><strong>Ключ API</strong> нужен для ИИ-функций (саммари, комментарий, вопрос, сравнение с оригиналом) — вводится в панели «ИИ»: <a href="https://openrouter.ai/keys" target="_blank" style="color:var(--accent);">OpenRouter</a> (основной, без VPN и карты) и/или <a href="https://console.groq.com" target="_blank" style="color:var(--accent);">Groq</a> (запасной).</p>
+            <p><strong>Ключ API</strong> нужен для ИИ-функций («Ранее в книге», комментарий, вопрос, сравнение с оригиналом) — вводится в панели «ИИ»: <a href="https://openrouter.ai/keys" target="_blank" style="color:var(--accent);">OpenRouter</a> (основной, без VPN и карты) и/или <a href="https://console.groq.com" target="_blank" style="color:var(--accent);">Groq</a> (запасной).</p>
         `);
     });
 
@@ -2607,7 +2913,7 @@
     }
 
     // ============================================================
-    // САММАРИ (инкрементально, по прогрессу чтения — как в предыдущей версии)
+    // «РАНЕЕ В КНИГЕ» и прогресс
     // ============================================================
     // Для "Моей полки" прогресс должен отражать САМОЕ ДАЛЬНЕЕ место, до которого
     // вообще когда-либо дочитали, а не текущую позицию (иначе процент "падал"
@@ -2642,24 +2948,45 @@
         const tailSize = LIMIT - headSize;
         return full.slice(0, headSize) + '\n\n…(пропущена середина — книга длинная)…\n\n' + full.slice(-tailSize);
     }
-    // Текст МЕЖДУ двумя точками чтения (не от начала книги) — для дозаписи
-    // саммари: пересылать модели нужно только новый кусок, а не весь
-    // растущий read-so-far заново.
-    function getParagraphRangeText(fromIdx, toIdx) {
+    // Текст ОДНОЙ главы целиком (для «Ранее в книге» — не всё прочитанное,
+    // только последняя прочитанная глава, см. вкладку ТЗ). Та же
+    // голова+хвост усечка, что и у getReadSoFarText, на случай длинной главы.
+    function getChapterText(fromIdx, toIdx) {
         const full = ALL_PARAGRAPHS.slice(fromIdx, toIdx + 1).map(p => p.textContent.trim()).join('\n').trim();
         const LIMIT = 12000;
         if (full.length <= LIMIT) return full;
         const headSize = 3000;
         const tailSize = LIMIT - headSize;
-        return full.slice(0, headSize) + '\n\n…(пропущена середина куска)…\n\n' + full.slice(-tailSize);
+        return full.slice(0, headSize) + '\n\n…(пропущена середина главы)…\n\n' + full.slice(-tailSize);
     }
-    function renderSummaryModal(summaryText) {
-        openModal('📋 Саммари прочитанного', `
-            <div class="summary-text">${escapeHtml(summaryText)}</div>
-            <div style="margin-top:1rem;font-size:.75rem;opacity:.5;border-top:1px solid var(--border);padding-top:.5rem;">
-                Объём: ${summaryText.length} символов
-            </div>
-        `);
+    // Границы последней ПРОЧИТАННОЙ главы (по chapterOfParagraph/chapterFirstParagraph
+    // из buildChapterIndex). idx может попасть на преамбулу до первого
+    // заголовка (chapterOfParagraph[idx] === -1) — тогда границы 0..до первой главы.
+    function getChapterRange(idx) {
+        const c = chapterOfParagraph[idx];
+        const from = c >= 0 ? (chapterFirstParagraph[c] || 0) : 0;
+        const nextStart = chapterFirstParagraph[c + 1];
+        const to = Number.isInteger(nextStart) ? nextStart - 1 : ALL_PARAGRAPHS.length - 1;
+        return { from, to, chapter: c };
+    }
+    // Ответ модели — строго в двух блоках (см. промпт ниже), чтобы не городить
+    // JSON-парсинг поверх LLM: «ТЕКУЩЕЕ:» — пункты для показа читателю,
+    // «НЕЗАКРЫТО:» — новый список взамен старого целиком.
+    function parseRecapResponse(raw) {
+        const marker = /незакрыто\s*:/i;
+        const m = marker.exec(raw);
+        const currentBlock = (m ? raw.slice(0, m.index) : raw).replace(/^\s*текущее\s*:/i, '');
+        const unresolvedBlock = m ? raw.slice(m.index).replace(marker, '') : '';
+        const toBullets = (block) => block.split('\n')
+            .map(line => line.replace(/^[\s•\-*]+/, '').trim())
+            .filter(Boolean);
+        return { current: toBullets(currentBlock), unresolved: toBullets(unresolvedBlock).slice(0, 5) };
+    }
+    function renderRecapModal(bullets) {
+        const list = bullets.length
+            ? '<ul style="margin:0;padding-left:1.2rem;">' + bullets.map(b => `<li style="margin-bottom:.5rem;">${escapeHtml(b)}</li>`).join('') + '</ul>'
+            : '<div class="comment-text">Пусто.</div>';
+        openModal('📖 Ранее в книге', list);
     }
 
     // Раньше здесь был прямой запрос на api.groq.com — но Groq геоблокирует
@@ -2718,97 +3045,84 @@
         throw new Error('Не настроен ни один ИИ-ключ (OpenRouter или Groq) — откройте настройки ⚙️');
     }
 
-    // Лёгкое запоминание в памяти (не в хранилище) — чтобы повторный клик на
-    // том же самом месте без движения не дёргал API второй раз подряд впустую
-    let lastSummaryIndex = -2;
-    let lastSummaryText = '';
+    // Лёгкое запоминание в памяти (не в хранилище) — чтобы повторный клик без
+    // смены главы не дёргал API второй раз подряд впустую. То, что реально
+    // персистится (READER.recap: unresolved/chapterCovered/generatedAt) —
+    // не текст для показа, а рабочее состояние для СЛЕДУЮЩЕЙ генерации и
+    // для экспорта/импорта, см. вкладку ТЗ.
+    let lastRecapChapter = -2;
+    let lastRecapBullets = null;
 
-    async function generateSummary() {
+    async function generateRecap() {
         const currentIdx = getCurrentParagraphIndex();
-        if (currentIdx < 0) { openModal('Саммари', 'Прочитайте хотя бы несколько абзацев, чтобы сгенерировать саммари.'); return; }
+        if (currentIdx < 0) { openModal('Ранее в книге', 'Прочитайте хотя бы несколько абзацев.'); return; }
 
-        if (currentIdx === lastSummaryIndex && lastSummaryText) {
-            renderSummaryModal(lastSummaryText);
+        const { from, to, chapter } = getChapterRange(currentIdx);
+        if (chapter === lastRecapChapter && lastRecapBullets) {
+            renderRecapModal(lastRecapBullets);
             return;
         }
 
-        // Первое саммари за сессию — пересказываем всё прочитанное с нуля.
-        // Повторное (докуда дочитали с прошлого раза) — НЕ пересказываем
-        // растущий текст заново (там всегда одно и то же начало книги при
-        // обрезке для длинных текстов — старое саммари получалось бы почти
-        // тем же самым плюс довесок новых предложений). Вместо этого отдаём
-        // модели старое саммари + только новый прочитанный кусок и просим
-        // переписать ОДНИМ цельным текстом, своими словами.
-        const hasPrevious = !!lastSummaryText && lastSummaryIndex >= 0 && lastSummaryIndex < currentIdx;
-        const text = hasPrevious ? getParagraphRangeText(lastSummaryIndex + 1, currentIdx) : getReadSoFarText(currentIdx);
-        if (!hasPrevious && text.length < 100) {
-            openModal('Саммари', 'Прочитайте хотя бы несколько абзацев, чтобы сгенерировать саммари.');
-            return;
-        }
+        if (!READER.apiKey && !READER.openrouterApiKey) { promptForApiKey(generateRecap); return; }
 
-        if (!READER.apiKey && !READER.openrouterApiKey) { promptForApiKey(generateSummary); return; }
-
-        openModal('Саммари', '<div class="loading"><div class="loading-spinner"></div>Генерация саммари... Это может занять 10–30 секунд.</div>');
+        openModal('Ранее в книге', '<div class="loading"><div class="loading-spinner"></div>Собираю «Ранее в книге»...</div>');
 
         try {
-            const coverage = (currentIdx + 1) / ALL_PARAGRAPHS.length;
-            const targetLength = Math.round(400 + coverage * 1100);
+            const chapterText = getChapterText(from, to);
             const bookLabel = READER.bookTitle ? `«${READER.bookTitle}»` : 'загруженного текста';
+            const prevUnresolved = (READER.recap && READER.recap.unresolved) || [];
+            const unresolvedBlock = prevUnresolved.length
+                ? `\n\nРанее было отмечено как незакрытое (часть могла разрешиться в этой главе — не переноси разрешённое дальше):\n${prevUnresolved.map(u => '- ' + u).join('\n')}\n`
+                : '';
 
-            let prompt;
-            if (hasPrevious) {
-                prompt = `Вот саммари ранее прочитанной части текста ${bookLabel}, которое ты же составил(а) раньше:
+            const prompt = `Читатель книги ${bookLabel} возвращается к чтению после паузы и хочет короткое напоминание «что было», а не пересказ всей книги.
+
+Последняя прочитанная им глава целиком:
 ---
-${lastSummaryText}
+${chapterText}
 ---
+${unresolvedBlock}
+Ответь СТРОГО в этом формате, без вступлений и заключений, на языке текста:
 
-С тех пор было прочитано продолжение:
----
-${text}
----
+ТЕКУЩЕЕ:
+- (5–6 коротких пунктов: на какой сцене читатель остановился; какие действующие лица сейчас в игре — только имена, без описаний; что осталось не закрыто — договор, угроза, ложь, дорога и т.п. Без атмосферы, без «главной интриги с первой главы», без уже разрешённого.)
 
-Перепиши ОБЪЕДИНЁННОЕ саммари заново — цельный, слитный пересказ и старой, и новой части вместе, своими словами. Это НЕ должно читаться как старое саммари с добавленными в конец новыми предложениями — перескажи заново, переформулируй, не копируй фразы из старого саммари дословно. Опиши ключевые события, атмосферу и главную интригу на данный момент. Объём: примерно ${targetLength} символов. Ответь только саммари, без комментариев.`;
-            } else {
-                prompt = `Ты — литературный критик. Напиши краткое, содержательное саммари прочитанной части текста ${bookLabel} на языке этого текста.
+НЕЗАКРЫТО:
+- (обновлённый короткий список того, что не закрыто к концу ЭТОЙ главы, не больше 5 пунктов — только то, что ещё актуально)`;
 
-Опиши ключевые события, атмосферу и главную интригу. Объём: примерно ${targetLength} символов.
-
-Текст для саммари:
----
-${text}
----
-
-Ответь только саммари, без комментариев.`;
-            }
-
-            const summary = await callLLM([
-                { role: 'system', content: 'Ты — внимательный литературный критик. Отвечай на языке предложенного текста.' },
+            const raw = await callLLM([
+                { role: 'system', content: 'Ты — внимательный литературный ассистент. Отвечаешь строго по запрошенному формату, на языке предложенного текста.' },
                 { role: 'user', content: prompt }
-            ], 2000);
+            ], 900);
 
-            lastSummaryIndex = currentIdx;
-            lastSummaryText = summary;
+            const { current, unresolved } = parseRecapResponse(raw);
 
-            READER.summaryHistory.push({ timestamp: Date.now(), summary });
-            if (READER.summaryHistory.length > 10) READER.summaryHistory.shift();
-            bookSave('summaryHistory', JSON.stringify(READER.summaryHistory));
+            lastRecapChapter = chapter;
+            lastRecapBullets = current;
 
-            renderSummaryModal(summary);
+            READER.recap = { unresolved, chapterCovered: chapter, generatedAt: Date.now() };
+            bookSave('recap', JSON.stringify(READER.recap));
+
+            renderRecapModal(current);
         } catch (err) {
-            openModal('Саммари', `<div style="color:#ff6b6b;">❌ Ошибка: ${escapeHtml(err.message)}</div>`);
+            openModal('Ранее в книге', `<div style="color:#ff6b6b;">❌ Ошибка: ${escapeHtml(err.message)}</div>`);
         }
     }
-    // (кнопка саммари перенесена в панель «Ассистент» — см. assistantSummaryItem)
+    // (кнопка «Ранее в книге» — в панели «Ассистент», см. assistantSummaryItem)
 
     // «Вопрос по содержанию» — в отличие от «Комментария» (который разбирает
     // ВЫДЕЛЕННЫЙ отрывок), это свободный вопрос без выделения текста: кто
     // такой персонаж, что произошло, детали события и т.п. Охват текста —
     // тот же, что и у саммари (getReadSoFarText): от начала книги до
     // текущего места, чтобы не спойлерить то, что ещё не прочитано.
-    async function askQuestion(excerpt) {
+    // paragraphId — только когда вопрос пришёл из тулбара выделения (есть
+    // конкретный абзац и цитата); из панели «Ассистент» — undefined, и тогда
+    // в материалы вопрос не попадает (ему некуда деться — у него нет места
+    // в книге, см. ТЗ «Материалы по книге»).
+    async function askQuestion(excerpt, paragraphId) {
         const currentIdx = getCurrentParagraphIndex();
         if (currentIdx < 0) { openModal('Вопрос по содержанию', 'Прочитайте хотя бы несколько абзацев, чтобы задать вопрос.'); return; }
-        if (!READER.apiKey && !READER.openrouterApiKey) { promptForApiKey(() => askQuestion(excerpt)); return; }
+        if (!READER.apiKey && !READER.openrouterApiKey) { promptForApiKey(() => askQuestion(excerpt, paragraphId)); return; }
 
         const excerptHint = excerpt
             ? `<p style="margin-bottom:.7rem;color:var(--text-soft);font-size:.85rem;">К вопросу будет приложен выделенный отрывок.</p>`
@@ -2858,6 +3172,9 @@ ${excerptBlock}
                         <div style="background:var(--bg-soft);padding:.7rem;border-radius:8px;">${escapeHtml(answer)}</div>
                     </div>
                 `);
+                // Вопрос из тулбара выделения (есть отрывок и абзац) — можно
+                // оставить в материалах; из панели «Ассистент» — нет, там нет привязки к месту.
+                if (paragraphId) appendMaterialsSaveBar(() => offerSaveToMaterials(paragraphId, 'question', excerpt, question, answer));
             } catch (err) {
                 openModal('Вопрос по содержанию', `<div style="color:#ff6b6b;">❌ Ошибка: ${escapeHtml(err.message)}</div>`);
             }
@@ -2889,10 +3206,39 @@ ${excerptBlock}
 
     // --- «Комментарий»: контекстный разбор отрывка, без привязки ко второму файлу ---
     $('selectionAskBtn').addEventListener('click', () => {
-        const selected = window.getSelection().toString().trim();
+        const sel = window.getSelection();
+        const selected = sel.toString().trim();
         if (!selected) return;
+        const anchorEl = sel.anchorNode && sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentElement : sel.anchorNode;
+        const para = anchorEl ? anchorEl.closest('p[id^="p-"]') : null;
         selectionToolbar.classList.remove('open');
-        askQuestion(selected);
+        askQuestion(selected, para ? para.id : undefined);
+    });
+
+    // --- «Заметка»: без ИИ и без ключа, своими словами ---
+    $('selectionNoteBtn').addEventListener('click', () => {
+        const sel = window.getSelection();
+        const selected = sel.toString().trim();
+        if (!selected) return;
+        const anchorEl = sel.anchorNode && sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentElement : sel.anchorNode;
+        const para = anchorEl ? anchorEl.closest('p[id^="p-"]') : null;
+        if (!para) return;
+        selectionToolbar.classList.remove('open');
+
+        const existing = findMaterialCard(para.id);
+        openModal('📝 Заметка', `
+            <div style="margin-bottom:.7rem;">
+                <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem;">Цитата:</div>
+                <div style="background:var(--bg-soft);padding:.7rem;border-radius:8px;">${escapeHtml(selected)}</div>
+            </div>
+            <textarea id="materialsNoteInput" rows="4" style="width:100%;box-sizing:border-box;padding:.6rem;border-radius:8px;border:1px solid var(--border);background:var(--bg-soft);color:var(--text);font-family:inherit;font-size:.95rem;resize:vertical;" placeholder="Своими словами — без запроса к ИИ">${existing && existing.note ? escapeHtml(existing.note) : ''}</textarea>
+        `);
+        $('materialsNoteInput').focus();
+        appendMaterialsSaveBar(() => {
+            const note = $('materialsNoteInput').value.trim();
+            if (!note) { closeModal(); return; }
+            offerSaveToMaterials(para.id, 'note', selected, note);
+        });
     });
 
     $('selectionCommentBtn').addEventListener('click', async () => {
@@ -2929,6 +3275,7 @@ ${contextBlock}
             ], 700);
 
             openModal('💬 Комментарий', `<div class="comment-text">${escapeHtml(comment)}</div>`);
+            if (para) appendMaterialsSaveBar(() => offerSaveToMaterials(para.id, 'comment', selected, comment));
         } catch (err) {
             openModal('Комментарий', `<div style="color:#ff6b6b;">❌ Ошибка: ${escapeHtml(err.message)}</div>`);
         }
@@ -3002,6 +3349,7 @@ ${contextBlock}
                     <div style="background:var(--bg-soft);padding:.7rem;border-radius:8px;font-style:italic;">${escapeHtml(quote)}</div>
                 </div>
             `);
+            if (para) appendMaterialsSaveBar(() => offerSaveToMaterials(para.id, 'original', selectedText, quote));
         } catch (err) {
             openModal('Сравнение с оригиналом', `<div style="color:#ff6b6b;">❌ Ошибка: ${escapeHtml(err.message)}</div>`);
         }
