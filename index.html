@@ -3,7 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>LINK — читайте книгу с ИИ-помощником</title>
+<title>LINK — связь двух версий одной книги</title>
+<meta property="og:type" content="website">
+<meta property="og:title" content="LINK — связь двух версий одной книги">
+<meta property="og:description" content="Читай перевод. Сверяйся с оригиналом или источником. На экране одна версия, вторая связана с ней по отрывку.">
+<meta property="og:url" content="https://ilsoft-dev.github.io/LINK/">
+<meta property="og:image" content="https://ilsoft-dev.github.io/LINK/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="description" content="Читай перевод. Сверяйся с оригиналом или источником. На экране одна версия, вторая связана с ней по отрывку.">
 <!-- CSP через meta — лучшее, что доступно на GitHub Pages (своих HTTP-
      заголовков там нет). frame-ancestors/X-Frame-Options отсюда не
      работают (только из HTTP-заголовка), от clickjacking это не
@@ -92,15 +101,26 @@
         display:flex; flex-direction:column; align-items:center;
         padding:2.5rem 1.25rem 2rem; min-height:100vh; min-height:100dvh;
     }
-    header{ text-align:center; margin-bottom:2.2rem; }
+    header{ text-align:center; margin-bottom:1.6rem; max-width:20rem; }
     .brand{
         font-family:'Lora', serif; font-weight:700;
         font-size:clamp(2.6rem, 11vw, 3.4rem);
         color:var(--accent); letter-spacing:.01em; margin:0; line-height:1;
     }
+    .brand-rule{
+        width:2.2rem; height:1px; margin:.8rem auto 0;
+        background:var(--accent); opacity:.55;
+    }
     .tagline{
-        font-family:'Inter', sans-serif; font-size:.72rem; letter-spacing:.22em;
-        text-transform:uppercase; color:var(--text-soft); margin:.7rem 0 0;
+        font-family:'PT Serif', Georgia, serif; font-size:1.08rem;
+        letter-spacing:0; text-transform:none; color:var(--text);
+        margin:.75rem 0 0; line-height:1.35;
+    }
+    .tagline-lead, .tagline-follow{ display:block; }
+    .tagline-follow{ color:var(--text-soft); }
+    .tagline-aside{
+        display:block; margin-top:.2rem;
+        font-family:'Inter', sans-serif; font-size:.78rem;
     }
     .card{
         width:100%; max-width:460px; background:var(--bg-card);
@@ -490,7 +510,11 @@
     <div id="uploadScreen">
         <header>
             <h1 class="brand">LINK</h1>
-            <p class="tagline">Читайте книгу с ИИ-помощником — в одиночку или сразу на двух языках</p>
+            <div class="brand-rule"></div>
+            <p class="tagline">
+                <span class="tagline-lead">Читай перевод.</span>
+                <span class="tagline-follow">Сверяйся с оригиналом <span class="tagline-aside">(или источником)</span></span>
+            </p>
             <div id="shelfLinkWrap" style="margin-top:1rem;">
                 <button id="shelfOpenBtn" class="cta-btn secondary" style="width:auto;display:inline-block;padding:.6rem 1.3rem;">📚 Моя полка <span id="shelfCount"></span></button>
             </div>
@@ -510,14 +534,14 @@
 
                 <div class="swap-row">
                     <div class="line"></div>
-                    <button class="round-btn swap-btn" id="swapBtn" title="Поменять языки местами" aria-label="Поменять языки местами">⇄</button>
+                    <button class="round-btn swap-btn" id="swapBtn" title="Поменять файлы местами" aria-label="Поменять файлы местами">⇄</button>
                     <div class="line"></div>
                 </div>
 
                 <div class="dropzone" id="zoneB" tabindex="0" role="button" aria-label="Загрузить оригинал для сравнения (необязательно)">
                     <div class="dz-icon">🔤</div>
                     <div class="dz-label" id="labelB">Оригинал <span style="opacity:.6;font-weight:400;">(необязательно)</span></div>
-                    <div class="dz-hint">Для сравнения и «Комментария»</div>
+                    <div class="dz-hint">Чтобы сверять выделенный отрывок с исходником</div>
                     <div class="dz-meta">.txt · .fb2 · .epub · .pdf · .docx · .html · .zip</div>
                     <div class="dz-filename" id="filenameB">Файл не выбран</div>
                     <div class="dz-error" id="errorB"></div>
@@ -533,7 +557,7 @@
             <div class="status" id="status"></div>
         </main>
 
-        <footer>LINK — читать книгу на двух языках сразу</footer>
+        <footer>LINK — связь двух версий одной книги</footer>
     </div>
 
     <!-- ============================================================
@@ -2365,7 +2389,7 @@
                 });
             });
         }
-        if (mode === 'a' || mode === 'both') scan(slots.A.parsed && slots.A.parsed.chapters, 'Перевод', true);
+        if (mode === 'a' || mode === 'both') scan(slots.A.parsed && slots.A.parsed.chapters, 'Текст', true);
         if ((mode === 'b' || mode === 'both') && READER.hasOriginal) scan(slots.B.parsed && slots.B.parsed.chapters, 'Оригинал', false);
         return results;
     }
@@ -2498,6 +2522,8 @@
             <p style="margin-bottom:1rem;"><strong>Нижняя панель:</strong> «Аа» — размер шрифта, межстрочный интервал, поля страницы и абзацный отступ; «Метка» — закладка на видимый абзац; «Список» — все закладки; «ИИ» — саммари, свободный вопрос по содержанию и ввод ключа; «Голос» — чтение вслух.</p>
             <p style="margin-bottom:1rem;"><strong>☰ вверху</strong> — оглавление книги. Панели прячутся при скролле — потяните вверх, нажмите кружок в углу, чтобы вернуть, или используйте кнопки ▲/▼ для прокрутки без свайпов.</p>
             <p style="margin-bottom:1rem;"><strong>Тема</strong> (кнопка сверху) переключается по кругу: светлая → тёмная → monochrome ink.</p>
+            <p style="margin-bottom:1rem;"><strong>Поиск</strong> (лупа вверху) идёт по тексту на экране. В режиме LINK — ещё и по второй версии. Совпадение из неё открывается в окне, страница не листается.</p>
+            <p style="margin-bottom:1rem;">На полке <strong>«Экспорт»</strong> сохраняет книги, закладки и прогресс в JSON. <strong>«Импорт»</strong> добавляет: свои книги не затирает и не вытесняет. <strong>«Поделиться»</strong> отправляет этот JSON в другое приложение. Внутри полный текст книг, не только названия.</p>
             <p><strong>Ключ API</strong> нужен для ИИ-функций (саммари, комментарий, вопрос, сравнение с оригиналом) — вводится в панели «ИИ»: <a href="https://openrouter.ai/keys" target="_blank" style="color:var(--accent);">OpenRouter</a> (основной, без VPN и карты) и/или <a href="https://console.groq.com" target="_blank" style="color:var(--accent);">Groq</a> (запасной).</p>
         `);
     });
