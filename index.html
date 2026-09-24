@@ -756,7 +756,6 @@
     <!-- ТУЛБАР ВЫДЕЛЕНИЯ -->
     <div class="selection-toolbar" id="selectionToolbar">
         <div class="st-inner">
-            <button id="selectionCommentBtn">💬 Комментарий</button>
             <button id="selectionAskBtn">❓ Вопрос</button>
             <button id="selectionNoteBtn">📝 Заметка</button>
             <button id="selectionOriginalBtn" style="display:none;">📄 Оригинал</button>
@@ -2823,7 +2822,7 @@
         openModal('Как это работает', `
             <p style="margin-bottom:1rem;"><strong>1. Загрузите текст.</strong> Файл для чтения — обязателен, оригинал — по желанию. Форматы: .txt, .fb2, .epub, .pdf, .docx, .html, а также .zip с любым из этих форматов внутри.</p>
             <p style="margin-bottom:1rem;"><strong>«Читать»</strong> — открывает книгу без оригинала. <strong>LINK</strong> — открывает с оригиналом, добавляя сравнение отрывков.</p>
-            <p style="margin-bottom:1rem;"><strong>В читалке:</strong> выделите слово или фразу — появятся «💬 Комментарий» (разбор отрывка), «❓ Вопрос» (вопрос по содержанию с этим отрывком как контекстом), «📝 Заметка» (свои слова, без ИИ и без ключа) и «📄 Оригинал» (если файл оригинала загружен). После комментария, вопроса или оригинала можно нажать «Оставить здесь» — так отрывок попадёт в «Материалы».</p>
+            <p style="margin-bottom:1rem;"><strong>В читалке:</strong> выделите слово или фразу — появятся «❓ Вопрос» (вопрос по содержанию с этим отрывком как контекстом), «📝 Заметка» (свои слова, без ИИ и без ключа) и «📄 Оригинал» (если файл оригинала загружен). После вопроса или оригинала можно нажать «Оставить здесь» — так отрывок попадёт в «Материалы».</p>
             <p style="margin-bottom:1rem;">Любую выезжающую панель (полка, закладки, оформление, ассистент) можно закрыть не только крестиком, но и тапом по области чтения рядом.</p>
             <p style="margin-bottom:1rem;"><strong>Нижняя панель:</strong> «Аа» — размер шрифта, межстрочный интервал, поля страницы и абзацный отступ; «Метка» — закладка на видимый абзац; «Список» — все закладки; «ИИ» — «Ранее в книге», свободный вопрос по содержанию и ввод ключа; «Голос» — чтение вслух.</p>
             <p style="margin-bottom:1rem;"><strong>☰ вверху</strong> — оглавление книги. Панели прячутся при скролле — потяните вверх, нажмите кружок в углу, чтобы вернуть, или используйте кнопки ▲/▼ для прокрутки без свайпов.</p>
@@ -3286,7 +3285,7 @@ ${excerptBlock}
     // (кнопка вопроса дублирована в тулбаре выделения — см. selectionAskBtn — и в панели «Ассистент» — см. assistantAskItem)
 
     // ============================================================
-    // ТУЛБАР ВЫДЕЛЕНИЯ: «Оригинал» и «Комментарий»
+    // ТУЛБАР ВЫДЕЛЕНИЯ: «Вопрос», «Заметка», «Оригинал»
     // ============================================================
     const selectionToolbar = $('selectionToolbar');
     let selectionTimeout = null;
@@ -3307,7 +3306,7 @@ ${excerptBlock}
         }
     });
 
-    // --- «Комментарий»: контекстный разбор отрывка, без привязки ко второму файлу ---
+    // --- «Вопрос»: свободный вопрос по содержанию с выделенным отрывком как контекстом ---
     $('selectionAskBtn').addEventListener('click', () => {
         const sel = window.getSelection();
         const selected = sel.toString().trim();
@@ -3342,46 +3341,6 @@ ${excerptBlock}
             if (!note) { closeModal(); return; }
             offerSaveToMaterials(para.id, 'note', selected, note);
         });
-    });
-
-    $('selectionCommentBtn').addEventListener('click', async () => {
-        const sel = window.getSelection();
-        const selected = sel.toString().trim();
-        if (!selected) return;
-        if (!READER.apiKey && !READER.openrouterApiKey) { promptForApiKey(); return; }
-
-        selectionToolbar.classList.remove('open');
-        openModal('💬 Комментарий', '<div class="loading"><div class="loading-spinner"></div>Разбираю отрывок...</div>');
-
-        try {
-            const anchorEl = sel.anchorNode && sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentElement : sel.anchorNode;
-            const para = anchorEl ? anchorEl.closest('p[id^="p-"]') : null;
-            const paraText = para ? para.textContent.trim() : selected;
-            const prevPara = para && para.previousElementSibling && para.previousElementSibling.tagName === 'P'
-                ? para.previousElementSibling.textContent.trim() : '';
-
-            const contextBlock = [
-                prevPara ? `Предыдущий абзац:\n${prevPara}` : '',
-                `Абзац с выделением:\n${paraText}`,
-                `Выделенный отрывок:\n"${selected}"`,
-            ].filter(Boolean).join('\n\n');
-
-            const prompt = `Ты — литературный комментатор. Ниже — контекст и конкретный выделенный читателем отрывок из текста.
-
-${contextBlock}
-
-Напиши короткий (3–6 предложений) комментарий именно к ВЫДЕЛЕННОМУ отрывку: что здесь примечательного — с точки зрения сюжета, тона, характера персонажа, иронии или контраста с происходящим ранее. Если не уверен в конкретных исторических или биографических фактах — не выдумывай их, сосредоточься на литературном и контекстном анализе. Пиши на языке текста. Ответь только комментарием, без вступлений.`;
-
-            const comment = await callLLM([
-                { role: 'system', content: 'Ты — вдумчивый литературный комментатор. Не выдумываешь факты, которых не знаешь точно. Отвечаешь на языке предложенного текста.' },
-                { role: 'user', content: prompt }
-            ], 700);
-
-            openModal('💬 Комментарий', `<div class="comment-text">${escapeHtml(comment)}</div>`);
-            if (para) appendMaterialsSaveBar(() => offerSaveToMaterials(para.id, 'comment', selected, comment));
-        } catch (err) {
-            openModal('Комментарий', `<div style="color:#ff6b6b;">❌ Ошибка: ${escapeHtml(err.message)}</div>`);
-        }
     });
 
     // --- «Оригинал»: сравнение выделения с загруженным файлом B ---
