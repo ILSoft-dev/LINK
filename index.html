@@ -522,6 +522,54 @@
         .card{ padding:1.3rem; }
         .book-content{ padding-left:1.6rem; padding-right:1rem; }
     }
+
+    /* ============================================================
+       АЛЬБОМНАЯ ОРИЕНТАЦИЯ
+       ============================================================
+       Режим A («album-single», одна книга): вёрстка не меняется, крутим
+       только глифы кнопок компенсирующе повороту экрана — сам текст
+       перетекает в новый прямоугольник естественным reflow.
+       Режим B («split», LINK): два независимо скроллящихся столбца,
+       левый — вся книга A, правый — только текущая глава B. */
+    .topbar-right{ display:flex; align-items:center; gap:.5rem; }
+
+    .icon-svg.tilt-90, .ctrl-label.tilt-90{ transform:rotate(90deg); }
+    .icon-svg.tilt-270, .ctrl-label.tilt-270{ transform:rotate(-90deg); }
+    .ctrl-label{ display:inline-block; transition:transform .15s ease; }
+    .icon-svg{ transition:transform .15s ease; }
+
+    body.album-single #panelRestoreBtn,
+    body.album-single .floating-nav-btn{ display:none; }
+
+    #bookContentB{ display:none; }
+    body.split #readerView.active{
+        display:flex; align-items:stretch;
+        height:100vh; height:100dvh;
+        padding-top:60px; box-sizing:border-box;
+    }
+    body.split{ overflow:hidden; }
+    body.split .book-content{
+        display:block; max-width:none; margin:0; flex:1 1 50%; width:50%;
+        height:100%; overflow-y:auto; -webkit-overflow-scrolling:touch;
+        padding:1rem 1.1rem 2rem; position:relative;
+    }
+    body.split #bookContentB{ display:block; border-left:1px solid var(--border); }
+    .split-b-empty{
+        font-family:'Inter',sans-serif; font-size:.85rem; color:var(--text-soft);
+        text-align:center; padding:2rem 1rem;
+    }
+    /* Хром в сплите: низ и плавающие кнопки скрыты, шапка никогда не
+       прячется при скролле, «Оригинал» (нужен только одной книге) и
+       индикатор главы (двусмысленный на два столбца) — тоже скрыты. */
+    body.split .bottom-panel,
+    body.split .progress-track,
+    body.split #panelRestoreBtn,
+    body.split .floating-nav-btn,
+    body.split #chapterIndicator,
+    body.split #materialsToggle,
+    body.split #selectionOriginalBtn,
+    body.split #themeToggle.in-topbar{ display:none !important; }
+    body.split .reader-topbar{ transform:none !important; }
 </style>
 </head>
 <body>
@@ -594,13 +642,15 @@
         <div class="reader-topbar" id="readerTopbar">
             <button id="backBtn" class="round-btn" title="К загрузке">←</button>
             <div class="chapter-indicator" id="chapterIndicator"></div>
-            <button id="tocToggle" class="round-btn" title="Оглавление">☰</button>
-            <button id="materialsToggle" class="round-btn" title="Материалы по книге" style="display:none;">
-                <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6h4"/><path d="M2 10h4"/><path d="M2 14h4"/><path d="M2 18h4"/><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9.5 8h5"/><path d="M9.5 12H16"/><path d="M9.5 16H14"/></svg>
-            </button>
-            <button id="searchToggle" class="round-btn" title="Поиск по книге">
-                <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-            </button>
+            <div class="topbar-right" id="topbarRight">
+                <button id="tocToggle" class="round-btn" title="Оглавление">☰</button>
+                <button id="materialsToggle" class="round-btn" title="Материалы по книге" style="display:none;">
+                    <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6h4"/><path d="M2 10h4"/><path d="M2 14h4"/><path d="M2 18h4"/><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9.5 8h5"/><path d="M9.5 12H16"/><path d="M9.5 16H14"/></svg>
+                </button>
+                <button id="searchToggle" class="round-btn" title="Поиск по книге">
+                    <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                </button>
+            </div>
         </div>
         <div class="progress-track" id="progressTrack"><div class="progress-fill" id="progressBar"></div></div>
 
@@ -613,10 +663,11 @@
         <div class="tts-indicator" id="ttsIndicator">🔊 читаю…</div>
 
         <div class="book-content" id="bookContent"></div>
+        <div class="book-content" id="bookContentB"></div>
 
         <div class="bottom-panel" id="bottomPanel">
             <div class="controls">
-                <div class="ctrl-wrap">
+                <div class="ctrl-wrap" id="typeToggleWrap">
                     <button id="typeToggle" class="round-btn" title="Оформление">
                         <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v16"/><path d="M4 7V5a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v2"/><path d="M9 20h6"/></svg>
                     </button>
@@ -850,13 +901,17 @@
     let indent = parseFloat(safeStorage.getItem('link_indent')) || 1.4;
 
     function applyTypography() {
-        const bc = $('bookContent');
-        if (!bc) return;
-        bc.style.fontSize = fontSize + 'rem';
-        bc.style.lineHeight = lineHeight;
-        bc.style.paddingLeft = pageMargin + 'rem';
-        bc.style.paddingRight = pageMargin + 'rem';
-        bc.style.setProperty('--p-indent', indent + 'rem');
+        // Тот же «Aa» действует на оба столбца сплита — общий класс
+        // .book-content и одни и те же CSS-переменные на обоих контейнерах.
+        ['bookContent', 'bookContentB'].forEach(id => {
+            const bc = $(id);
+            if (!bc) return;
+            bc.style.fontSize = fontSize + 'rem';
+            bc.style.lineHeight = lineHeight;
+            bc.style.paddingLeft = pageMargin + 'rem';
+            bc.style.paddingRight = pageMargin + 'rem';
+            bc.style.setProperty('--p-indent', indent + 'rem');
+        });
     }
     function setFontSize(size) {
         fontSize = Math.min(1.6, Math.max(0.8, size));
@@ -1984,6 +2039,138 @@
             .replaceAll('>', '&gt;');
     }
 
+    // ============================================================
+    // АЛЬБОМНАЯ ОРИЕНТАЦИЯ / LINK-СПЛИТ
+    // ============================================================
+    // albumMode: 'portrait' | 'single' (одна книга, альбом, крутим глифы) |
+    // 'split' (LINK, альбом, широкий экран — два столбца).
+    let albumMode = 'portrait';
+    let currentLeftChapterIdx = -1;
+
+    function computeAlbumMode() {
+        if (!isReaderActive()) return 'portrait';
+        const isLandscape = window.innerWidth > window.innerHeight;
+        if (!isLandscape) return 'portrait';
+        if (READER.hasOriginal && window.innerWidth >= 700) return 'split';
+        return 'single';
+    }
+
+    // Номер главы (индекс h2.chapter-title в #bookContent), под которой
+    // сейчас находится позиция scrollTop — та же логика, что в
+    // updateChapterIndicator, но возвращает индекс, а не текст, и не трогает DOM.
+    function currentChapterIndexInA(scrollTop) {
+        const chapters = document.querySelectorAll('#bookContent .chapter-title');
+        let idx = -1;
+        chapters.forEach((ch, i) => { if (ch.offsetTop - 120 <= scrollTop) idx = i; });
+        return idx;
+    }
+
+    // Рендерит в правый столбец главу B с тем же порядковым номером, что и
+    // текущая глава A — НЕ ищет «тот же абзац», не угадывает текст. Если
+    // такой главы в оригинале нет — заглушка.
+    function renderRightChapter(idx) {
+        const containerB = $('bookContentB');
+        if (!containerB) return;
+        const safeIdx = Math.max(0, idx);
+        const chapters = READER.originalChapters || [];
+        const ch = chapters[safeIdx];
+        if (!ch) {
+            containerB.innerHTML = '<div class="split-b-empty">В оригинале нет главы с этим номером.</div>';
+            return;
+        }
+        let html = '';
+        if (ch.title) html += `<h2 class="chapter-title">${escapeHtml(ch.title)}</h2>`;
+        ch.paragraphs.forEach((text, i) => { html += `<p id="b-${i}">${escapeHtml(text)}</p>`; });
+        containerB.innerHTML = html;
+        containerB.scrollTop = 0;
+        applyTypography();
+    }
+
+    function onBookContentScroll() {
+        if (albumMode !== 'split' || isRestoringScroll) return;
+        const idx = currentChapterIndexInA($('bookContent').scrollTop);
+        if (idx !== currentLeftChapterIdx) {
+            currentLeftChapterIdx = idx;
+            renderRightChapter(idx);
+        }
+    }
+    $('bookContent').addEventListener('scroll', onBookContentScroll);
+
+    function enterSplitMode(chapterIdx) {
+        currentLeftChapterIdx = chapterIdx;
+        // exitSplitMode() гасит инлайн-стилем (сильнее любого CSS-правила без
+        // !important) — снимаем его, иначе body.split #bookContentB{display:block}
+        // не подействует при повторном входе в сплит.
+        $('bookContentB').style.display = '';
+        if ($('typeToggle').parentElement !== $('topbarRight')) {
+            $('topbarRight').appendChild($('typeToggle'));
+        }
+        renderRightChapter(chapterIdx);
+    }
+
+    // «Выход из сплита: #bookContentB убрать из потока документа полностью» —
+    // не просто скрыть CSS-ом, а очистить содержимое, чтобы старая глава B
+    // не оставалась в DOM и не мелькала при следующем входе в сплит.
+    function exitSplitMode() {
+        const b = $('bookContentB');
+        if (b) { b.innerHTML = ''; b.style.display = 'none'; }
+        const wrap = $('typeToggleWrap');
+        if (wrap && $('typeToggle').parentElement !== wrap) {
+            wrap.insertBefore($('typeToggle'), wrap.firstChild);
+        }
+    }
+
+    function applyTiltClasses() {
+        document.querySelectorAll('.icon-svg, .ctrl-label').forEach(el => {
+            el.classList.remove('tilt-90', 'tilt-270');
+        });
+        // Крутим глифы только в режиме A (одна книга, альбом) — в портрете
+        // и в LINK-сплите весь хром остаётся upright.
+        if (albumMode !== 'single') return;
+        const angle = (screen.orientation && typeof screen.orientation.angle === 'number') ? screen.orientation.angle : 0;
+        // Направление поворота глифов не проверено на реальном устройстве —
+        // см. итоговый отчёт задачи про angle=90 vs -90/270.
+        const cls = (angle === 90) ? 'tilt-90' : ((angle === -90 || angle === 270) ? 'tilt-270' : null);
+        if (cls) document.querySelectorAll('.icon-svg, .ctrl-label').forEach(el => el.classList.add(cls));
+    }
+
+    function updateAlbumMode() {
+        const mode = computeAlbumMode();
+        if (mode === albumMode) { applyTiltClasses(); return; }
+        const prevMode = albumMode;
+        // Сохраняем scrollY левой книги ДО смены раскладки — координатное
+        // пространство (window либо #bookContent) зависит от ПРЕЖНЕГО режима.
+        const savedScroll = prevMode === 'split' ? $('bookContent').scrollTop : window.scrollY;
+        const enteringSplit = mode === 'split' && prevMode !== 'split';
+        const leavingSplit = prevMode === 'split' && mode !== 'split';
+        const chapterIdxForEntry = enteringSplit ? currentChapterIndexInA(savedScroll) : -1;
+
+        albumMode = mode;
+        document.body.classList.toggle('split', mode === 'split');
+        document.body.classList.toggle('album-single', mode === 'single');
+
+        if (leavingSplit) exitSplitMode();
+        if (enteringSplit) enterSplitMode(chapterIdxForEntry);
+
+        applyTiltClasses();
+        if (mode === 'split') setPanelsHidden(false);
+
+        // Восстанавливаем позицию левой книги в НОВОЙ раскладке — после того,
+        // как классы применились и разметка пересчиталась.
+        requestAnimationFrame(() => {
+            if (mode === 'split') {
+                $('bookContent').scrollTop = savedScroll;
+            } else {
+                window.scrollTo(0, savedScroll);
+            }
+        });
+    }
+    window.addEventListener('resize', () => { if (isReaderActive()) updateAlbumMode(); });
+    window.addEventListener('orientationchange', () => { if (isReaderActive()) updateAlbumMode(); });
+    if (screen.orientation && screen.orientation.addEventListener) {
+        screen.orientation.addEventListener('change', () => { if (isReaderActive()) updateAlbumMode(); });
+    }
+
     function enterReader(mode) {
         const parsedA = slots.A.parsed;
         if (!parsedA) return;
@@ -2014,13 +2201,17 @@
         document.getElementById('readerView').classList.add('active');
 
         // Переносим кнопку темы в верхнюю панель читалки — иначе она,
-        // будучи зафиксирована в углу экрана, перекрывает кнопку оглавления
+        // будучи зафиксирована в углу экрана, перекрывает кнопку оглавления.
+        // Вставляем перед кластером #topbarRight (☰ теперь внутри него, не
+        // прямой ребёнок топбара, insertBefore(..., tocToggle) бы упал).
         $('themeToggle').classList.add('in-topbar');
-        $('readerTopbar').insertBefore($('themeToggle'), $('tocToggle'));
+        $('readerTopbar').insertBefore($('themeToggle'), $('topbarRight'));
         $('helpBtn').style.display = 'none';
 
+        albumMode = 'portrait';
         setPanelsHidden(false);
         saveToShelf();
+        updateAlbumMode();
         restoreReaderScroll(READER.lastScrollTop);
     }
 
@@ -2030,15 +2221,22 @@
         // восстанавливаем — updateProgress не пишет lastScrollTop (иначе
         // промежуточный scrollY=0 через 400мс затирает верное значение).
         isRestoringScroll = true;
+        // В сплите скроллится #bookContent (левая колонка), а не window —
+        // см. АЛЬБОМНАЯ ОРИЕНТАЦИЯ / LINK-СПЛИТ выше.
+        const setScroll = (v) => {
+            if (albumMode === 'split') $('bookContent').scrollTop = v;
+            else window.scrollTo(0, v);
+        };
+        const getScroll = () => (albumMode === 'split' ? $('bookContent').scrollTop : window.scrollY);
         const apply = () => {
-            window.scrollTo(0, y);
+            setScroll(y);
             lastScrollY = y;
-            paintProgress(y);
+            if (albumMode !== 'split') paintProgress(y);
             positionPanelRestoreBtn();
             requestAnimationFrame(() => {
-                window.scrollTo(0, y);
-                lastScrollY = window.scrollY;
-                paintProgress(window.scrollY);
+                setScroll(y);
+                lastScrollY = getScroll();
+                if (albumMode !== 'split') paintProgress(lastScrollY);
                 isRestoringScroll = false;
                 positionPanelRestoreBtn();
             });
@@ -2051,10 +2249,14 @@
 
     $('readBtn').addEventListener('click', () => enterReader('read'));
     $('linkBtn').addEventListener('click', () => enterReader('link'));
+    // В сплите позиция левой книги живёт в #bookContent.scrollTop, не в window.
+    function currentReaderScrollY() {
+        return albumMode === 'split' ? Math.round($('bookContent').scrollTop) : Math.round(window.scrollY);
+    }
     $('backBtn').addEventListener('click', () => {
         clearTimeout(lastScrollTopSaveTimer);
         lastScrollTopSaveTimer = null;
-        bookSave('lastScrollTop', Math.round(window.scrollY));
+        bookSave('lastScrollTop', currentReaderScrollY());
         saveToShelf();
         if (window.speechSynthesis) window.speechSynthesis.cancel();
         document.getElementById('readerView').classList.remove('active');
@@ -2063,6 +2265,12 @@
         $('themeToggle').classList.remove('in-topbar');
         document.body.insertBefore($('themeToggle'), document.body.firstChild);
         $('helpBtn').style.display = '';
+        // Сбрасываем альбомное состояние — портрет ведёт себя как обычно,
+        // #bookContentB полностью убирается из потока.
+        if (albumMode === 'split') exitSplitMode();
+        document.body.classList.remove('split', 'album-single');
+        albumMode = 'portrait';
+        applyTiltClasses();
         window.scrollTo(0, 0);
         // Иначе панель закладок/оглавления могла остаться визуально открытой
         // поверх экрана загрузки, если её не закрыли явно перед "Назад"
@@ -2076,7 +2284,7 @@
     // На случай закрытия вкладки без нажатия "Назад"
     window.addEventListener('pagehide', () => {
         if ($('readerView').classList.contains('active')) {
-            bookSave('lastScrollTop', Math.round(window.scrollY));
+            bookSave('lastScrollTop', currentReaderScrollY());
             saveToShelf();
         }
     });
@@ -2088,7 +2296,7 @@
     // сразу, надёжнее debounce-таймера ниже.
     document.addEventListener('visibilitychange', () => {
         if (document.hidden && $('readerView').classList.contains('active')) {
-            bookSave('lastScrollTop', Math.round(window.scrollY));
+            bookSave('lastScrollTop', currentReaderScrollY());
             saveToShelf();
         }
     });
@@ -2129,7 +2337,9 @@
         }, 400);
     }
     function updateChapterIndicator(scrollTop) {
-        const chapters = document.querySelectorAll('.chapter-title');
+        // Только глава A — в сплите правый столбец не участвует и сам
+        // индикатор скрыт (двусмысленный на два столбца).
+        const chapters = document.querySelectorAll('#bookContent .chapter-title');
         const indicator = $('chapterIndicator');
         if (!chapters.length) { indicator.textContent = READER.bookTitle; return; }
         let current = READER.bookTitle;
@@ -2148,6 +2358,9 @@
     const TOP_SAFE_ZONE = 40;     // у самого верха панели всегда показаны
 
     function setPanelsHidden(hidden) {
+        // Топбар в сплите никогда не прячется при скролле (тоже гасится CSS-ом
+        // на всякий случай, см. body.split .reader-topbar).
+        if (albumMode === 'split') hidden = false;
         panelsHidden = hidden;
         $('readerTopbar').classList.toggle('hidden', hidden);
         $('progressTrack').classList.toggle('hidden', hidden);
@@ -2176,6 +2389,7 @@
     window.addEventListener('resize', () => positionPanelRestoreBtn());
 
     function updatePanelVisibility(scrollTop) {
+        if (albumMode === 'split') return;   // топбар в сплите не прячем никогда
         if (suppressAutoPanels) { lastScrollY = scrollTop; return; }
         const delta = scrollTop - lastScrollY;
         if (scrollTop <= TOP_SAFE_ZONE) {
@@ -2250,8 +2464,22 @@
     // lineHeightPx — через getComputedStyle, а не хардкод: размер шрифта и
     // межстрочный интервал настраиваются пользователем (typeFontSize/typeLineHeight).
     function scrollToParagraph(target) {
-        const topbarHeight = 61; // reader-topbar (59px) + progress-track (2px)
         const lineHeightPx = parseFloat(getComputedStyle(target).lineHeight);
+        if (albumMode === 'split') {
+            // В сплите скроллится #bookContent (левая колонка), не window —
+            // target.offsetTop относительно него (контейнер position:relative).
+            const container = $('bookContent');
+            const offset = lineHeightPx * 2;
+            container.scrollTo({ top: Math.max(0, target.offsetTop - offset), behavior: 'smooth' });
+            // Закладка/материал/поиск могли перевести на другую главу A —
+            // правую колонку синхронизируем по её порядковому номеру, не по
+            // содержимому (см. buildChapterIndex/chapterOfParagraph).
+            const i = ALL_PARAGRAPHS.indexOf(target);
+            const idx = i >= 0 ? chapterOfParagraph[i] : currentChapterIndexInA(container.scrollTop);
+            if (idx !== currentLeftChapterIdx) { currentLeftChapterIdx = idx; renderRightChapter(idx); }
+            return;
+        }
+        const topbarHeight = 61; // reader-topbar (59px) + progress-track (2px)
         const linesFromTop = 7.5;
         const offset = topbarHeight + lineHeightPx * linesFromTop;
         const targetY = target.getBoundingClientRect().top + window.scrollY - offset;
@@ -2617,7 +2845,9 @@
     }
     function renderTOC() {
         const list = $('tocList');
-        const chapters = document.querySelectorAll('.chapter-title');
+        // Только глава A — оглавление всегда про левую (единственную в
+        // портрете) книгу, #bookContentB своих h2 в счёт не идёт.
+        const chapters = document.querySelectorAll('#bookContent .chapter-title');
         if (!chapters.length) { list.innerHTML = '<div class="empty-msg">Глав не найдено</div>'; return; }
         const furthestIdx = getFurthestParagraphIndex();
         list.innerHTML = Array.from(chapters).map((ch, i) => {
@@ -2634,6 +2864,8 @@
             item.addEventListener('click', () => {
                 chapters[i].scrollIntoView({ behavior: 'smooth', block: 'start' });
                 closeTOC();
+                // Смена главы слева в сплите → справа сразу та же глава B, с начала.
+                if (albumMode === 'split') { currentLeftChapterIdx = i; renderRightChapter(i); }
             });
         });
     }
@@ -2700,6 +2932,67 @@
         return results;
     }
 
+    // Грубая оценка письменности книги по выборке первых абзацев — тем же
+    // способом, что detectLang для одной фразы (кириллица vs латиница).
+    function bookScript(chapters) {
+        if (!chapters || !chapters.length) return null;
+        const sample = chapters.slice(0, 2).map(c => (c.paragraphs || []).slice(0, 5).join(' ')).join(' ');
+        return sample.trim() ? detectLang(sample) : null;
+    }
+
+    // Поиск в сплите — НЕ «тот же абзац» в A/B, а автоматическая маршрутизация
+    // по письменности запроса: кириллица → колонка на кириллице, латиница →
+    // колонка на латинице; если обе книги на одной письменности — ищем в
+    // обеих и в выдаче ставим метку. B ищем только в текущей отрендеренной
+    // главе (#bookContentB) — это всё, что реально на экране, без угадывания
+    // по всей книге.
+    let splitSearchNote = '';
+    function performSplitSearch(query) {
+        splitSearchNote = '';
+        const q = query.trim();
+        if (q.length < 2) return [];
+        const needle = q.toLowerCase();
+        const qScript = detectLang(q);
+        const scriptA = bookScript(slots.A.parsed && slots.A.parsed.chapters);
+        const scriptB = READER.hasOriginal ? bookScript(slots.B.parsed && slots.B.parsed.chapters) : null;
+        const sameScriptBooks = !!(scriptA && scriptB && scriptA === scriptB);
+        const searchA = sameScriptBooks || !READER.hasOriginal || qScript !== scriptB;
+        const searchB = READER.hasOriginal && (sameScriptBooks || qScript === scriptB);
+
+        const results = [];
+        if (searchA) {
+            ALL_PARAGRAPHS.forEach(p => {
+                const text = p.textContent;
+                const pos = text.toLowerCase().indexOf(needle);
+                if (pos !== -1) {
+                    results.push({
+                        column: 'a', paragraphId: p.id, chapterTitle: getChapterForId(p.id),
+                        snippetHtml: highlightMatch(text, pos, q.length, SEARCH_SNIPPET_CTX),
+                        source: sameScriptBooks ? 'Текст' : null,
+                    });
+                }
+            });
+        }
+        if (searchB) {
+            const bParas = $('bookContentB') ? Array.from($('bookContentB').querySelectorAll('p[id^="b-"]')) : [];
+            bParas.forEach(p => {
+                const text = p.textContent;
+                const pos = text.toLowerCase().indexOf(needle);
+                if (pos !== -1) {
+                    results.push({
+                        column: 'b', paragraphId: p.id, chapterTitle: 'Оригинал — текущая глава',
+                        snippetHtml: highlightMatch(text, pos, q.length, SEARCH_SNIPPET_CTX),
+                        source: sameScriptBooks ? 'Оригинал' : null,
+                    });
+                }
+            });
+            if (!bParas.some(p => p.textContent.toLowerCase().includes(needle)) && !searchA) {
+                splitSearchNote = 'В этой главе нет.';
+            }
+        }
+        return results;
+    }
+
     function goToSearchResult(r) {
         closeSearch();
         if (r.paragraphId) {
@@ -2714,6 +3007,23 @@
         }
     }
 
+    // Хит A → скролл к p-N (левая колонка). Хит B → скролл к временному
+    // b-k в правой колонке (k — индекс в текущей отрендеренной главе).
+    function goToSplitSearchResult(r) {
+        closeSearch();
+        const el = document.getElementById(r.paragraphId);
+        if (!el) return;
+        if (r.column === 'a') {
+            scrollToParagraph(el);
+        } else {
+            const container = $('bookContentB');
+            const lineHeightPx = parseFloat(getComputedStyle(el).lineHeight) || 24;
+            container.scrollTo({ top: Math.max(0, el.offsetTop - lineHeightPx * 2), behavior: 'smooth' });
+        }
+        el.classList.add('search-highlight');
+        setTimeout(() => el.classList.remove('search-highlight'), 1600);
+    }
+
     function renderSearchResultsBatch() {
         const container = $('searchResults');
         const batch = searchResultsAll.slice(searchRenderedCount, searchRenderedCount + SEARCH_BATCH);
@@ -2724,11 +3034,11 @@
             card.innerHTML = `
                 <div class="chapter">
                     <span>${escapeHtml(r.chapterTitle)}</span>
-                    ${currentSearchMode === 'both' ? `<span class="source-tag">${escapeHtml(r.source)}</span>` : ''}
+                    ${(currentSearchMode === 'both' || (albumMode === 'split' && r.source)) ? `<span class="source-tag">${escapeHtml(r.source)}</span>` : ''}
                 </div>
                 <div class="snippet">${r.snippetHtml}</div>
             `;
-            card.addEventListener('click', () => goToSearchResult(r));
+            card.addEventListener('click', () => albumMode === 'split' ? goToSplitSearchResult(r) : goToSearchResult(r));
             frag.appendChild(card);
         });
         const oldSentinel = document.getElementById('searchSentinel');
@@ -2760,10 +3070,10 @@
                 : '<div class="search-hint">Введите не меньше двух символов.</div>';
             return;
         }
-        searchResultsAll = performSearch(q, currentSearchMode);
+        searchResultsAll = albumMode === 'split' ? performSplitSearch(q) : performSearch(q, currentSearchMode);
         container.innerHTML = '';
         if (!searchResultsAll.length) {
-            container.innerHTML = '<div class="search-empty">Ничего не найдено.</div>';
+            container.innerHTML = `<div class="search-empty">${escapeHtml(splitSearchNote || 'Ничего не найдено.')}</div>`;
             return;
         }
         renderSearchResultsBatch();
@@ -2789,7 +3099,9 @@
         searchRenderedCount = 0;
         $('searchResults').innerHTML = '<div class="search-hint">Введите не меньше двух символов.</div>';
         currentSearchMode = READER.hasOriginal ? 'both' : 'a';
-        $('searchModeSwitch').style.display = READER.hasOriginal ? '' : 'none';
+        // В сплите переключатель A/B/оба не нужен — маршрутизация по
+        // письменности запроса автоматическая, см. performSplitSearch.
+        $('searchModeSwitch').style.display = (READER.hasOriginal && albumMode !== 'split') ? '' : 'none';
         $('searchModeSwitch').querySelectorAll('.search-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === currentSearchMode));
         setPanelsHidden(false);   // панель висит под топбаром — топбар должен быть на месте
         $('searchOverlay').classList.add('open');
