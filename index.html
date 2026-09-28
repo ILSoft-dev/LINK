@@ -28,6 +28,15 @@
 <link rel="icon" href="icons/icon-192.png">
 <link rel="stylesheet" href="fonts.css">
 <style>
+    @property --bg { syntax: '<color>'; inherits: true; initial-value: #F7F0E1; }
+    @property --bg-soft { syntax: '<color>'; inherits: true; initial-value: #ECDFC8; }
+    @property --bg-card { syntax: '<color>'; inherits: true; initial-value: #F1E6D0; }
+    @property --text { syntax: '<color>'; inherits: true; initial-value: #2B2622; }
+    @property --text-soft { syntax: '<color>'; inherits: true; initial-value: #7A6F63; }
+    @property --accent { syntax: '<color>'; inherits: true; initial-value: #7A2E2E; }
+    @property --accent-soft { syntax: '<color>'; inherits: true; initial-value: #F2DEDC; }
+    @property --border { syntax: '<color>'; inherits: true; initial-value: #DBC7A5; }
+
     :root{
         --bg:#F7F0E1;
         --bg-soft:#ECDFC8;
@@ -38,6 +47,7 @@
         --accent-soft:#F2DEDC;
         --border:#DBC7A5;
         --shadow: 0 20px 60px rgba(43,38,34,0.10);
+        --theme-ease: background-color .4s ease, color .4s ease, border-color .4s ease, fill .4s ease, stroke .4s ease;
     }
     body.dark{
         --bg:#1C1A17;
@@ -68,9 +78,13 @@
     html,body{ margin:0; padding:0; }
     body{
         min-height:100vh; min-height:100dvh;
-        background:var(--bg); color:var(--text);
+        background-color:var(--bg); color:var(--text);
         font-family:'PT Serif', Georgia, serif;
-        transition:background .3s, color .3s;
+        transition:
+            var(--theme-ease),
+            --bg .4s ease, --bg-soft .4s ease, --bg-card .4s ease,
+            --text .4s ease, --text-soft .4s ease,
+            --accent .4s ease, --accent-soft .4s ease, --border .4s ease;
     }
     ::selection{ background:var(--accent-soft); }
 
@@ -78,10 +92,10 @@
     .round-btn{
         width:42px; height:42px; min-width:42px; border-radius:50%;
         border:1px solid var(--border);
-        background:var(--bg-soft); color:var(--text);
+        background-color:var(--bg-soft); color:var(--text);
         display:flex; align-items:center; justify-content:center;
         font-size:1.05rem; cursor:pointer;
-        transition:background .2s, transform .15s, border-color .2s;
+        transition: var(--theme-ease), transform .15s;
         flex-shrink:0; padding:0;
     }
     .round-btn:hover{ border-color:var(--accent); }
@@ -123,8 +137,9 @@
         font-family:'Inter', sans-serif; font-size:.78rem;
     }
     .card{
-        width:100%; max-width:460px; background:var(--bg-card);
+        width:100%; max-width:460px; background-color:var(--bg-card);
         border:1px solid var(--border); border-radius:20px;
+        transition: var(--theme-ease);
         box-shadow:var(--shadow); padding:1.6rem;
     }
     .dropzones{ display:flex; flex-direction:column; gap:0; }
@@ -181,9 +196,9 @@
     .reader-topbar{
         position:fixed; top:0; left:0; right:0; z-index:90;
         display:flex; align-items:center; gap:.5rem;
-        padding:.6rem .8rem; background:var(--bg);
+        padding:.6rem .8rem; background-color:var(--bg);
         border-bottom:1px solid var(--border);
-        transition:background .3s, border-color .3s, transform .25s ease;
+        transition: var(--theme-ease), transform .25s ease;
     }
     .reader-topbar.hidden{ transform:translateY(-100%); }
     .chapter-indicator{
@@ -192,11 +207,11 @@
         white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:center;
     }
     .progress-track{
-        position:fixed; top:59px; left:0; right:0; height:2px; background:var(--border); z-index:89;
-        transition:transform .25s ease;
+        position:fixed; top:59px; left:0; right:0; height:2px; background-color:var(--border); z-index:89;
+        transition:transform .25s ease, background-color .4s ease;
     }
     .progress-track.hidden{ transform:translateY(-59px); }
-    .progress-fill{ height:100%; width:0%; background:var(--accent); transition:width .1s; }
+    .progress-fill{ height:100%; width:0%; background-color:var(--accent); transition:width .1s, background-color .4s ease; }
 
     .book-content{
         max-width:640px; margin:0 auto;
@@ -225,9 +240,9 @@
 
     .bottom-panel{
         position:fixed; bottom:0; left:0; right:0; z-index:100;
-        background:var(--bg); border-top:1px solid var(--border);
+        background-color:var(--bg); border-top:1px solid var(--border);
         padding:.5rem .6rem calc(.5rem + env(safe-area-inset-bottom));
-        transition:background .3s, border-color .3s, transform .25s ease;
+        transition: var(--theme-ease), transform .25s ease;
     }
     .bottom-panel.hidden{ transform:translateY(100%); }
     .controls{
@@ -277,6 +292,16 @@
         opacity:0; transition:opacity .3s; pointer-events:none;
     }
     .tts-indicator.on{ opacity:1; }
+    .book-content p.tts-current{ background-color:var(--accent-soft); border-radius:6px; }
+    .app-toast{
+        position:fixed; left:50%; bottom:calc(96px + env(safe-area-inset-bottom));
+        transform:translateX(-50%) translateY(12px); z-index:10000;
+        max-width:min(90vw, 420px); padding:.7rem 1rem; border-radius:12px;
+        background:var(--text); color:var(--bg);
+        font-family:'Inter',sans-serif; font-size:.85rem; line-height:1.35; text-align:center;
+        opacity:0; pointer-events:none; transition:opacity .25s, transform .25s;
+    }
+    .app-toast.show{ opacity:.96; transform:translateX(-50%) translateY(0); }
 
     /* ===== Нижние панели (полка, закладки, оформление, ассистент) =====
        Высота по содержимому: max-height — потолок, не принудительная высота.
@@ -285,10 +310,10 @@
        пунктами открывался огромным пустым листом. */
     .bookmarks-panel{
         position:fixed; bottom:0; left:0; right:0; z-index:110;
-        background:var(--bg-card); border-top:2px solid var(--accent);
+        background-color:var(--bg-card); border-top:2px solid var(--accent);
         padding:1rem 1rem calc(1.1rem + env(safe-area-inset-bottom));
         height:auto; max-height:min(85vh, 85dvh); overflow-y:auto;
-        transform:translateY(100%); transition:transform .3s ease;
+        transform:translateY(100%); transition:transform .3s ease, var(--theme-ease);
         box-shadow:0 -10px 40px var(--shadow);
     }
     .bookmarks-panel.open{ transform:translateY(0); }
@@ -363,7 +388,8 @@
     }
     .modal-overlay.open{ display:flex; }
     .modal{
-        background:var(--bg-card); border:1px solid var(--border); border-radius:16px;
+        background-color:var(--bg-card); border:1px solid var(--border); border-radius:16px;
+        transition: var(--theme-ease);
         padding:1.4rem; max-width:520px; width:100%; max-height:80vh; max-height:80dvh; overflow-y:auto;
     }
     .modal-header{
@@ -424,9 +450,9 @@
         position:fixed; top:0; left:0; bottom:0; z-index:130;
         width:280px; max-width:82vw;
         height:100vh; height:100dvh;
-        background:var(--bg-card); border-right:1px solid var(--border);
+        background-color:var(--bg-card); border-right:1px solid var(--border);
         padding:1.3rem 1.1rem; overflow-y:auto;
-        transform:translateX(-100%); transition:transform .3s ease;
+        transform:translateX(-100%); transition:transform .3s ease, var(--theme-ease);
         box-shadow:var(--shadow);
     }
     .toc-panel.open{ transform:translateX(0); }
@@ -474,7 +500,7 @@
     .search-panel{
         position:fixed; top:59px; left:0; right:0; z-index:140;
         max-height:calc(100vh - 59px); max-height:calc(100dvh - 59px);
-        background:var(--bg-card); border-bottom:1px solid var(--border);
+        background-color:var(--bg-card); border-bottom:1px solid var(--border);
         padding:1.1rem 1.1rem 1.3rem; overflow-y:auto;
         /* -100vh, а не -110% — высота панели зависит от числа результатов, и
            процентный translate от собственной (маленькой) высоты не уводил бы
@@ -1441,7 +1467,7 @@
         bookmarks: [],
         recap: null,   // { unresolved: [...], chapterCovered, generatedAt } | null — см. «Ранее в книге»
         materials: [], // [{id, quote, chapter, note?, comment?, question?, answer?, original?, timestamp}] — см. «Материалы по книге»
-        furthestScrollBottom: 0,
+        furthestParagraph: -1,   // индекс самого дальнего абзаца (раньше было furthestScrollBottom в пикселях)
     };
     let ALL_PARAGRAPHS = [];
 
@@ -1527,6 +1553,20 @@
         const toRemove = all.slice(0, all.length - SHELF_MAX_ENTRIES);
         for (const entry of toRemove) await shelfDelete(entry.bookKey);
     }
+    let appToastTimer = null;
+    function showToast(msg, ms) {
+        let el = document.getElementById('appToast');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'appToast';
+            el.className = 'app-toast';
+            document.body.appendChild(el);
+        }
+        el.textContent = msg;
+        el.classList.add('show');
+        clearTimeout(appToastTimer);
+        appToastTimer = setTimeout(() => el.classList.remove('show'), ms || 5000);
+    }
     async function shelfPut(entry) {
         try {
             const db = await openShelfDB();
@@ -1534,10 +1574,19 @@
                 const tx = db.transaction(SHELF_STORE, 'readwrite');
                 tx.objectStore(SHELF_STORE).put(entry);
                 tx.oncomplete = resolve;
-                tx.onerror = () => reject(tx.error);
+                // при нехватке места транзакция abort-ится: ошибка приходит в onabort, а не всегда в onerror
+                tx.onerror = (ev) => reject((ev && ev.target && ev.target.error) || tx.error);
+                tx.onabort = () => reject(tx.error || new Error('Транзакция прервана'));
             });
-            await shelfEnforceLimit();
-        } catch (e) { console.warn('Не удалось сохранить книгу на полку:', e.message); }
+        } catch (e) {
+            console.warn('Не удалось сохранить книгу на полку:', e && e.message);
+            showToast(e && e.name === 'QuotaExceededError'
+                ? 'Не хватает места на устройстве — книга не сохранена на полку. Удалите ненужные книги с полки.'
+                : 'Не удалось сохранить книгу на полку. Читать можно, но после закрытия придётся загрузить файл заново.');
+            return;
+        }
+        try { await shelfEnforceLimit(); }
+        catch (e) { console.warn('Не удалось применить лимит полки:', e && e.message); }
     }
 
     async function saveToShelf() {
@@ -1648,7 +1697,7 @@
     // что уже хранится. Импорт только добавляет: локальное не затирается.
     const LINK_EXPORT_VERSION = 1;
     const BOOK_STATE_JSON_FIELDS = ['bookmarks', 'recap', 'materials'];
-    const BOOK_STATE_NUMBER_FIELDS = ['furthestScrollBottom', 'lastScrollTop'];
+    const BOOK_STATE_NUMBER_FIELDS = ['furthestParagraph', 'furthestScrollBottom', 'lastScrollTop'];
 
     function readBookState(bookKey) {
         const prefix = bookKey + ':';
@@ -1841,7 +1890,14 @@
             if (importedWins) safeStorage.setItem(k('recap'), JSON.stringify(importedRecap));
         }
 
-        // Самое дальнее место: max — прогресс не откатывается
+        // Самое дальнее место (индекс абзаца): max — прогресс не откатывается
+        const importedFurthestPara = parseInt(imported.furthestParagraph);
+        const localFurthestParaRaw = parseInt(safeStorage.getItem(k('furthestParagraph')));
+        if (Number.isFinite(importedFurthestPara) && (!Number.isFinite(localFurthestParaRaw) || importedFurthestPara > localFurthestParaRaw)) {
+            safeStorage.setItem(k('furthestParagraph'), importedFurthestPara);
+        }
+        // Старый формат (пиксели) — только для экспортов из прежней версии; при
+        // открытии книги он один раз переводится в индекс абзаца (см. enterReader)
         const importedFurthest = parseInt(imported.furthestScrollBottom);
         const localFurthest = parseInt(safeStorage.getItem(k('furthestScrollBottom'))) || 0;
         if (Number.isFinite(importedFurthest) && importedFurthest > localFurthest) {
@@ -1996,7 +2052,8 @@
         READER.bookmarks = JSON.parse(bookLoad('bookmarks') || '[]');
         READER.recap = JSON.parse(bookLoad('recap') || 'null');
         READER.materials = JSON.parse(bookLoad('materials') || '[]');
-        READER.furthestScrollBottom = parseInt(bookLoad('furthestScrollBottom')) || 0;
+        const storedFurthestPara = parseInt(bookLoad('furthestParagraph'));
+        READER.furthestParagraph = Number.isFinite(storedFurthestPara) ? storedFurthestPara : -1;
         READER.lastScrollTop = parseInt(bookLoad('lastScrollTop')) || 0;
 
         renderBook(parsedA);
@@ -2005,6 +2062,7 @@
         renderBookmarks();
         syncMaterialsMarks();
         applyFontSize();
+        migrateLegacyProgress();
 
         // Кнопка "Оригинал" в тулбаре выделения доступна только если файл B загружен и выбран LINK
         $('selectionOriginalBtn').style.display = READER.hasOriginal ? 'flex' : 'none';
@@ -2021,6 +2079,18 @@
         setPanelsHidden(false);
         saveToShelf();
         restoreReaderScroll(READER.lastScrollTop);
+    }
+
+    // Одноразовая миграция: раньше самое дальнее место хранилось в пикселях
+    // (furthestScrollBottom) и «плыло» при смене шрифта/полей. Переводим в
+    // индекс абзаца по текущей раскладке и дальше пишем только его.
+    function migrateLegacyProgress() {
+        if (READER.furthestParagraph >= 0 || Number.isFinite(parseInt(bookLoad('furthestParagraph')))) return;
+        const legacyPx = parseInt(bookLoad('furthestScrollBottom')) || 0;
+        if (legacyPx <= 0) return;
+        const idx = paragraphIndexAtY(legacyPx);
+        READER.furthestParagraph = idx;
+        if (idx >= 0) bookSave('furthestParagraph', idx);
     }
 
     function restoreReaderScroll(y) {
@@ -2055,7 +2125,7 @@
         lastScrollTopSaveTimer = null;
         bookSave('lastScrollTop', Math.round(window.scrollY));
         saveToShelf();
-        if (window.speechSynthesis) window.speechSynthesis.cancel();
+        ttsStop(false);
         document.getElementById('readerView').classList.remove('active');
         document.getElementById('uploadScreen').style.display = '';
         // Возвращаем кнопку темы в её обычный плавающий угол на экране загрузки
@@ -2115,9 +2185,10 @@
         const scrollTop = window.scrollY;
         paintProgress(scrollTop);
         const bottom = scrollTop + window.innerHeight;
-        if (bottom > READER.furthestScrollBottom) {
-            READER.furthestScrollBottom = bottom;
-            bookSave('furthestScrollBottom', Math.round(bottom));
+        const seenIdx = paragraphIndexAtY(bottom);
+        if (seenIdx > READER.furthestParagraph) {
+            READER.furthestParagraph = seenIdx;
+            bookSave('furthestParagraph', seenIdx);
         }
         // Последнюю позицию скролла пишем не на каждое событие (их сотни при
         // одной прокрутке), а с задержкой — раз скролл остановился на ~400мс.
@@ -2669,10 +2740,27 @@
     // Возвращает [{paragraphId, chapterTitle, snippetHtml, fullHtml, source}].
     // paragraphId есть только для источника A — единственного, что реально
     // отрисовано в #bookContent (индекс абзаца считаем так же, как renderBook).
+    // ё и е считаем одной буквой (замена 1→1, позиции в тексте не сдвигаются)
+    function normSearch(str) { return str.toLowerCase().replace(/ё/g, 'е'); }
+    let searchUsedStem = false;
     function performSearch(query, mode) {
         const q = query.trim();
+        searchUsedStem = false;
         if (q.length < 2) return [];
-        const needle = q.toLowerCase();
+        const exact = scanBook(normSearch(q), mode, false);
+        if (exact.length) return exact;
+        // Точных совпадений нет — пробуем другие формы слова: для одного
+        // кириллического слова отбрасываем 2 (или 1) последние буквы окончания
+        // и ищем по началу слова («книгой» найдёт «книга», «книгу»)
+        if (/^[а-яёА-ЯЁ]{5,}$/.test(q)) {
+            const stem = normSearch(q).slice(0, q.length >= 6 ? -2 : -1);
+            const forms = scanBook(stem, mode, true);
+            if (forms.length) searchUsedStem = true;
+            return forms;
+        }
+        return exact;
+    }
+    function scanBook(needle, mode, extendToWordEnd) {
         const results = [];
         function scan(chapters, source, withParagraphId) {
             if (!chapters) return;
@@ -2680,13 +2768,17 @@
             chapters.forEach((ch, ci) => {
                 const chapterTitle = (ch.title && ch.title.trim()) || ('Часть ' + (ci + 1));
                 ch.paragraphs.forEach(text => {
-                    const pos = text.toLowerCase().indexOf(needle);
+                    const pos = normSearch(text).indexOf(needle);
                     if (pos !== -1) {
+                        let len = needle.length;
+                        if (extendToWordEnd) {   // подсвечиваем слово целиком, а не только основу
+                            while (pos + len < text.length && /[a-zA-Zа-яёА-ЯЁ]/.test(text[pos + len])) len++;
+                        }
                         results.push({
                             paragraphId: withParagraphId ? ('p-' + idx) : null,
                             chapterTitle,
-                            snippetHtml: highlightMatch(text, pos, q.length, SEARCH_SNIPPET_CTX),
-                            fullHtml: highlightMatch(text, pos, q.length, Infinity),
+                            snippetHtml: highlightMatch(text, pos, len, SEARCH_SNIPPET_CTX),
+                            fullHtml: highlightMatch(text, pos, len, Infinity),
                             source,
                         });
                     }
@@ -2765,6 +2857,9 @@
             container.innerHTML = '<div class="search-empty">Ничего не найдено.</div>';
             return;
         }
+        if (searchUsedStem) {
+            container.innerHTML = '<div class="search-hint">Точных совпадений нет — показаны другие формы слова.</div>';
+        }
         renderSearchResultsBatch();
     }
 
@@ -2837,39 +2932,132 @@
     // ============================================================
     // TTS
     // ============================================================
-    let ttsUtterance = null, ttsSpeaking = false;
+    // Чтение вслух по абзацам: очередь абзацев, каждый режется на куски по
+    // ~220 символов (длинные реплики в Chrome/Android обрываются), текущий
+    // абзац подсвечивается, страница подъезжает сама. «Пауза» = остановка с
+    // запоминанием абзаца (speechSynthesis.pause() на Android ненадёжен).
+    const TTS_MAX_CHUNK = 220;
+    let ttsUtterance = null;      // держим ссылку — иначе сборщик мусора иногда съедает onend
+    let ttsSession = 0;           // растёт при каждом старте/остановке — отсекает запоздалые onend
+    let ttsActive = false, ttsPaused = false;
+    let ttsParaIdx = -1, ttsChunks = [], ttsChunkPos = 0, ttsLang = 'ru-RU';
+    let ttsHighlighted = null;
     function detectLang(text) {
         const cyr = (text.match(/[а-яё]/gi) || []).length;
         const lat = (text.match(/[a-z]/gi) || []).length;
         return cyr >= lat ? 'ru-RU' : 'en-US';
     }
-    function getVisibleText() {
-        let text = '';
-        for (const p of ALL_PARAGRAPHS) {
-            const rect = p.getBoundingClientRect();
-            if (rect.top < window.innerHeight && rect.bottom > 0) text += p.textContent.trim() + ' ';
+    function splitForTTS(text) {
+        const sentences = text.match(/[^.!?…]+[.!?…]+["»”)]*\s*|[^.!?…]+$/g) || [text];
+        const out = [];
+        let cur = '';
+        for (const sent of sentences) {
+            if (cur && cur.length + sent.length > TTS_MAX_CHUNK) { out.push(cur.trim()); cur = ''; }
+            cur += sent;
+            while (cur.length > TTS_MAX_CHUNK * 1.4) {   // одно очень длинное предложение — режем по пробелу
+                let cut = cur.lastIndexOf(' ', TTS_MAX_CHUNK);
+                if (cut < 40) cut = TTS_MAX_CHUNK;
+                out.push(cur.slice(0, cut).trim());
+                cur = cur.slice(cut);
+            }
         }
-        return text.trim();
+        if (cur.trim()) out.push(cur.trim());
+        return out.filter(Boolean);
+    }
+    function ttsPickVoice(lang) {
+        const voices = window.speechSynthesis.getVoices();
+        return voices.find(v => v.lang === lang) || voices.find(v => v.lang.startsWith(lang.slice(0, 2)));
+    }
+    function ttsSetIndicator(state) {
+        const el = $('ttsIndicator');
+        el.classList.toggle('on', state !== 'off');
+        el.textContent = state === 'paused' ? '⏸ пауза' : '🔊 читаю…';
+    }
+    function ttsMark(i) {
+        if (ttsHighlighted) ttsHighlighted.classList.remove('tts-current');
+        ttsHighlighted = ALL_PARAGRAPHS[i] || null;
+        if (ttsHighlighted) ttsHighlighted.classList.add('tts-current');
+    }
+    // Подъезжаем к абзацу, только если он ушёл с экрана или слишком низко;
+    // панели при этом не дёргаем (тот же флаг, что и у кнопок ▲▼)
+    function ttsKeepInView(el) {
+        const r = el.getBoundingClientRect();
+        if (r.bottom > 80 && r.top < window.innerHeight * 0.6) return;
+        suppressAutoPanels = true;
+        clearTimeout(suppressAutoPanelsTimer);
+        suppressAutoPanelsTimer = setTimeout(() => { suppressAutoPanels = false; }, 900);
+        window.scrollTo({ top: window.scrollY + r.top - window.innerHeight * 0.22, behavior: 'smooth' });
+    }
+    function hasReadableText(el) { return /[\p{L}\p{N}]/u.test(el.textContent); }
+    function ttsSpeakChunk(session) {
+        if (session !== ttsSession) return;
+        if (ttsChunkPos >= ttsChunks.length) { ttsNextParagraph(session); return; }
+        const u = new SpeechSynthesisUtterance(ttsChunks[ttsChunkPos]);
+        u.lang = ttsLang;
+        u.rate = 0.95;
+        const voice = ttsPickVoice(ttsLang);
+        if (voice) u.voice = voice;
+        u.onend = () => { if (session !== ttsSession) return; ttsChunkPos++; ttsSpeakChunk(session); };
+        u.onerror = (e) => {
+            if (session !== ttsSession) return;
+            if (e && (e.error === 'interrupted' || e.error === 'canceled')) return;
+            ttsStop(true);   // настоящая ошибка — встаём на паузу на этом абзаце
+        };
+        ttsUtterance = u;
+        window.speechSynthesis.speak(u);
+    }
+    function ttsNextParagraph(session) {
+        if (session !== ttsSession) return;
+        let i = ttsParaIdx + 1;
+        while (i < ALL_PARAGRAPHS.length && !hasReadableText(ALL_PARAGRAPHS[i])) i++;
+        if (i >= ALL_PARAGRAPHS.length) { ttsStop(false); return; }   // книга кончилась
+        ttsParaIdx = i;
+        ttsMark(i);
+        ttsKeepInView(ALL_PARAGRAPHS[i]);
+        const text = ALL_PARAGRAPHS[i].textContent.trim();
+        ttsLang = detectLang(text);
+        ttsChunks = splitForTTS(text);
+        ttsChunkPos = 0;
+        ttsSpeakChunk(session);
+    }
+    function ttsStart(fromIdx) {
+        ttsSession++;
+        const session = ttsSession;
+        window.speechSynthesis.cancel();
+        ttsActive = true;
+        ttsPaused = false;
+        ttsSetIndicator('on');
+        ttsParaIdx = fromIdx - 1;                      // ttsNextParagraph возьмёт именно fromIdx
+        setTimeout(() => ttsNextParagraph(session), 60);   // после cancel() Chrome иногда глотает немедленный speak()
+    }
+    // paused=true — пауза с запоминанием абзаца; false — полная остановка
+    function ttsStop(paused) {
+        ttsSession++;
+        ttsActive = false;
+        ttsPaused = !!paused && ttsParaIdx >= 0;
+        if (window.speechSynthesis) window.speechSynthesis.cancel();
+        if (ttsPaused) { ttsSetIndicator('paused'); }
+        else { ttsSetIndicator('off'); ttsMark(-1); ttsParaIdx = -1; }
+    }
+    // Первый абзац, который хоть частично на экране
+    function firstVisibleParagraphIndex() {
+        if (!ALL_PARAGRAPHS.length) return -1;
+        let i = Math.max(0, paragraphIndexAtY(window.scrollY + 1));
+        while (i < ALL_PARAGRAPHS.length - 1 &&
+               (ALL_PARAGRAPHS[i].offsetTop + ALL_PARAGRAPHS[i].offsetHeight < window.scrollY + 40 || !hasReadableText(ALL_PARAGRAPHS[i]))) i++;
+        return i;
     }
     function toggleTTS() {
-        if (ttsSpeaking) {
-            window.speechSynthesis.cancel();
-            ttsSpeaking = false; $('ttsIndicator').classList.remove('on');
-            return;
-        }
-        const text = getVisibleText();
-        if (!text) { openModal('Чтение вслух', 'Нет видимого текста для чтения.'); return; }
         if (!window.speechSynthesis) { openModal('Чтение вслух', 'Браузер не поддерживает голосовое чтение.'); return; }
-        ttsUtterance = new SpeechSynthesisUtterance(text);
-        ttsUtterance.lang = detectLang(text);
-        ttsUtterance.rate = 0.95;
-        const voices = window.speechSynthesis.getVoices();
-        const voice = voices.find(v => v.lang.startsWith(ttsUtterance.lang.slice(0, 2)));
-        if (voice) ttsUtterance.voice = voice;
-        ttsUtterance.onstart = () => { ttsSpeaking = true; $('ttsIndicator').classList.add('on'); };
-        ttsUtterance.onend = () => { ttsSpeaking = false; $('ttsIndicator').classList.remove('on'); };
-        ttsUtterance.onerror = () => { ttsSpeaking = false; $('ttsIndicator').classList.remove('on'); };
-        window.speechSynthesis.speak(ttsUtterance);
+        if (ttsActive) { ttsStop(true); return; }
+        let from = firstVisibleParagraphIndex();
+        if (ttsPaused && ttsParaIdx >= 0 && ALL_PARAGRAPHS[ttsParaIdx]) {
+            // продолжаем с того же абзаца, если читатель не уехал далеко от него
+            const r = ALL_PARAGRAPHS[ttsParaIdx].getBoundingClientRect();
+            if (r.bottom > -window.innerHeight && r.top < window.innerHeight * 2) from = ttsParaIdx;
+        }
+        if (from < 0) { openModal('Чтение вслух', 'Нет текста для чтения.'); return; }
+        ttsStart(from);
     }
     $('ttsBtn').addEventListener('click', toggleTTS);
     if (window.speechSynthesis) {
@@ -2918,23 +3106,25 @@
     // Для "Моей полки" прогресс должен отражать САМОЕ ДАЛЬНЕЕ место, до которого
     // вообще когда-либо дочитали, а не текущую позицию (иначе процент "падал"
     // бы при обычном перечитывании более ранних глав).
-    function getFurthestParagraphIndex() {
-        let idx = -1;
-        for (let i = 0; i < ALL_PARAGRAPHS.length; i++) {
-            if (ALL_PARAGRAPHS[i].offsetTop < READER.furthestScrollBottom) idx = i; else break;
+    // Индекс абзаца не зависит от шрифта и полей — пиксели считаются заново
+    // только для ТЕКУЩЕЙ позиции (см. paragraphIndexAtY).
+    function paragraphIndexAtY(y) {
+        // последний абзац, чей верх выше линии y; offsetTop растёт монотонно — бинарный поиск
+        let lo = 0, hi = ALL_PARAGRAPHS.length - 1, res = -1;
+        while (lo <= hi) {
+            const mid = (lo + hi) >> 1;
+            if (ALL_PARAGRAPHS[mid].offsetTop < y) { res = mid; lo = mid + 1; } else hi = mid - 1;
         }
-        return idx;
+        return res;
+    }
+    function getFurthestParagraphIndex() {
+        return Math.min(READER.furthestParagraph, ALL_PARAGRAPHS.length - 1);
     }
     // Индекс абзаца по ТЕКУЩЕЙ позиции скролла — саммари отвечает на "что было
     // до места, где я СЕЙЧАС", а не спойлерит тем, что видели раньше, но сейчас
     // перечитываете сначала.
     function getCurrentParagraphIndex() {
-        const bottom = window.scrollY + window.innerHeight;
-        let idx = -1;
-        for (let i = 0; i < ALL_PARAGRAPHS.length; i++) {
-            if (ALL_PARAGRAPHS[i].offsetTop < bottom) idx = i; else break;
-        }
-        return idx;
+        return paragraphIndexAtY(window.scrollY + window.innerHeight);
     }
     // Весь прочитанный текст от начала книги до текущего места. Для очень
     // длинных книг (роман, а не рассказ) берём не первые попавшиеся символы,
@@ -2942,9 +3132,11 @@
     // иначе на 20-й главе саммари пересказывало бы только первую главу.
     function getReadSoFarText(toIdx) {
         const full = ALL_PARAGRAPHS.slice(0, toIdx + 1).map(p => p.textContent.trim()).join('\n').trim();
-        const LIMIT = 15000;
+        // С ключом OpenRouter (у моделей большой контекст) шлём больше; только Groq —
+        // как раньше, у бесплатного тарифа жёсткий лимит токенов в минуту
+        const LIMIT = READER.openrouterApiKey ? 28000 : 15000;
         if (full.length <= LIMIT) return full;
-        const headSize = 3000;
+        const headSize = Math.round(LIMIT * 0.2);
         const tailSize = LIMIT - headSize;
         return full.slice(0, headSize) + '\n\n…(пропущена середина — книга длинная)…\n\n' + full.slice(-tailSize);
     }
@@ -2953,9 +3145,9 @@
     // голова+хвост усечка, что и у getReadSoFarText, на случай длинной главы.
     function getChapterText(fromIdx, toIdx) {
         const full = ALL_PARAGRAPHS.slice(fromIdx, toIdx + 1).map(p => p.textContent.trim()).join('\n').trim();
-        const LIMIT = 12000;
+        const LIMIT = READER.openrouterApiKey ? 28000 : 12000;
         if (full.length <= LIMIT) return full;
-        const headSize = 3000;
+        const headSize = Math.round(LIMIT * 0.2);
         const tailSize = LIMIT - headSize;
         return full.slice(0, headSize) + '\n\n…(пропущена середина)…\n\n' + full.slice(-tailSize);
     }
@@ -3056,13 +3248,53 @@
     // Список бесплатных моделей у OpenRouter ротируется буквально еженедельно
     // — если эта модель вдруг начнёт отвечать 404/400, зайдите на
     // openrouter.ai/models?max_price=0 и замените ID здесь на актуальный.
-    const OPENROUTER_MODEL = 'openai/gpt-oss-120b:free';
+    // Порядок = приоритет. Второй пункт — роутер OpenRouter: сам выбирает любую
+    // живую бесплатную модель, поэтому не протухает, когда конкретный :free-id
+    // снимают. Роутер выбирает модель случайно — качество плавает, но проверка
+    // isGroundedInSource отсекает откровенную выдумку.
+    const OPENROUTER_MODELS = [
+        'openai/gpt-oss-120b:free',
+        'openrouter/free',
+    ];
     // Прямой fetch на openrouter.ai убран: проверено вживую — без VPN из
     // Беларуси он тоже падает с failed to fetch, так что не давал никакой
     // выгоды в скорости, зато держал два разных домена для ключа/CSP/логики
     // вместо одного. Теперь оба провайдера всегда идут через один relay.
+    function isFatalRelayError(err) {
+        // сеть до relay упала, ключ не принят или запрос отклонён целиком — другая модель не поможет
+        if (err instanceof TypeError) return true;
+        return /\b401\b|\b403\b|Forbidden|Неверный формат ключа|Неверная длина ключа|Не передан api_key|Слишком большой запрос/i.test((err && err.message) || '');
+    }
     async function callOpenRouterViaRelay(messages, maxTokens) {
-        return callViaRelay('openrouter', READER.openrouterApiKey, messages, maxTokens, OPENROUTER_MODEL);
+        let lastErr = null;
+        for (const model of OPENROUTER_MODELS) {
+            try {
+                const content = await callViaRelay('openrouter', READER.openrouterApiKey, messages, maxTokens, model);
+                if (content && content.trim()) return content;
+                lastErr = new Error('Пустой ответ модели ' + model);
+            } catch (err) {
+                lastErr = err;
+                if (isFatalRelayError(err)) throw err;
+            }
+            console.warn('OpenRouter: модель ' + model + ' не ответила, пробуем следующую:', lastErr);
+        }
+        throw lastErr || new Error('OpenRouter не вернул ответ');
+    }
+
+    // У бесплатного тарифа Groq жёсткий лимит токенов на запрос: если промпт
+    // длиннее (мы теперь шлём больше для OpenRouter), вырезаем середину самого
+    // длинного сообщения — инструкции в начале и формат ответа в конце остаются.
+    const GROQ_SAFE_CHARS = 16000;
+    function fitMessagesForGroq(messages) {
+        const total = messages.reduce((n, m) => n + (m.content || '').length, 0);
+        if (total <= GROQ_SAFE_CHARS) return messages;
+        let li = 0;
+        messages.forEach((m, i) => { if ((m.content || '').length > (messages[li].content || '').length) li = i; });
+        const c = messages[li].content;
+        const keep = Math.max(2000, c.length - (total - GROQ_SAFE_CHARS) - 60);
+        const head = Math.round(keep * 0.35), tail = keep - head;
+        const cut = c.slice(0, head) + '\n\n…(пропущена середина)…\n\n' + c.slice(-tail);
+        return messages.map((m, i) => i === li ? { ...m, content: cut } : m);
     }
 
     // Единая точка входа для ИИ-функций (саммари/комментарий/оригинал).
@@ -3078,7 +3310,7 @@
                 if (!READER.apiKey) throw err;
             }
         }
-        if (READER.apiKey) return await callGroq(messages, maxTokens);
+        if (READER.apiKey) return await callGroq(fitMessagesForGroq(messages), maxTokens);
         throw new Error('Не настроен ни один ИИ-ключ (OpenRouter или Groq) — откройте настройки ⚙️');
     }
 
@@ -3344,8 +3576,9 @@ ${excerptBlock}
     });
 
     // --- «Оригинал»: сравнение выделения с загруженным файлом B ---
-    // Определяем номер главы (по порядку) абзаца — используем для того, чтобы
-    // искать соответствие в оригинале не по всей книге, а в районе той же главы
+    // Сначала ищем в тексте B без сети. LLM вызываем только если языки
+    // разные и локального совпадения нет. Ответ модели принимаем лишь
+    // когда цитата реально находится в оригинале — иначе это «ерунда».
     function getChapterIndexForParagraph(p) {
         if (!p) return 0;
         let idx = 0;
@@ -3356,51 +3589,124 @@ ${excerptBlock}
         }
         return idx;
     }
-    // Берём главу с тем же порядковым номером в оригинале, плюс по одной
-    // соседней с каждой стороны — на случай смещения нумерации на главу.
-    // Если книга короткая или число глав сильно расходится — просто берём весь текст.
-    function getOriginalSearchScope(chapterIdx) {
+    function getOriginalChaptersScope(chapterIdx) {
         const chapters = READER.originalChapters || [];
-        if (chapters.length <= 3 || chapterIdx >= chapters.length) {
-            return chapters.map(c => c.paragraphs.join('\n')).join('\n\n');
-        }
+        if (!chapters.length) return [];
+        if (chapters.length <= 3 || chapterIdx >= chapters.length) return chapters.slice();
         const from = Math.max(0, chapterIdx - 1);
         const to = Math.min(chapters.length - 1, chapterIdx + 1);
-        return chapters.slice(from, to + 1).map(c => c.paragraphs.join('\n')).join('\n\n');
+        return chapters.slice(from, to + 1);
+    }
+    function normalizeForMatch(str) {
+        return String(str || '')
+            .toLowerCase()
+            .replace(/ё/g, 'е')
+            .replace(/[“”«»„"]/g, '"')
+            .replace(/[‘’‛']/g, "'")
+            .replace(/[—–−]/g, '-')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+    function tokensForMatch(str) {
+        return normalizeForMatch(str).match(/[a-zа-я0-9]{3,}/g) || [];
+    }
+    function findQuoteInHaystack(haystack, needle) {
+        if (!haystack || !needle) return '';
+        const rawIdx = haystack.indexOf(needle);
+        if (rawIdx !== -1) return haystack.slice(rawIdx, rawIdx + needle.length);
+        const nHay = normalizeForMatch(haystack);
+        const nNeedle = normalizeForMatch(needle);
+        if (nNeedle.length >= 8) {
+            const nIdx = nHay.indexOf(nNeedle);
+            if (nIdx !== -1) {
+                // грубо восстанавливаем исходный фрагмент той же длины
+                const ratio = haystack.length / Math.max(1, nHay.length);
+                const approx = Math.max(0, Math.floor(nIdx * ratio) - 12);
+                const window = haystack.slice(approx, approx + needle.length + 48);
+                const wNorm = normalizeForMatch(window);
+                const local = wNorm.indexOf(nNeedle);
+                if (local !== -1) return window.trim();
+                return window.trim();
+            }
+        }
+        return '';
+    }
+    function localOriginalMatch(selectedText, chapterIdx) {
+        const scoped = getOriginalChaptersScope(chapterIdx);
+        const all = READER.originalChapters || [];
+        const pools = [scoped];
+        if (all.length && all !== scoped) pools.push(all);
+
+        for (const chapters of pools) {
+            for (const ch of chapters) {
+                for (const para of (ch.paragraphs || [])) {
+                    const hit = findQuoteInHaystack(para, selectedText);
+                    if (hit) return hit.length > selectedText.length + 40 ? selectedText : hit;
+                    const nPara = normalizeForMatch(para);
+                    const nSel = normalizeForMatch(selectedText);
+                    if (nSel.length >= 12 && nPara.includes(nSel)) return para;
+                }
+            }
+        }
+
+        // Неточное: абзац с наибольшим перекрытием слов выделения
+        const selTokens = tokensForMatch(selectedText);
+        if (selTokens.length < 2) return '';
+        let best = { score: 0, text: '' };
+        const searchChapters = scoped.length ? scoped : all;
+        for (const ch of searchChapters) {
+            for (const para of (ch.paragraphs || [])) {
+                const pTokens = new Set(tokensForMatch(para));
+                if (!pTokens.size) continue;
+                const hits = selTokens.filter(t => pTokens.has(t)).length;
+                const score = hits / selTokens.length;
+                if (score > best.score) best = { score, text: para };
+            }
+        }
+        // достаточно строго: иначе «похожий» абзац из соседней главы выдаём как оригинал
+        if (best.score >= 0.55 && best.text) {
+            const sentences = best.text.split(/(?<=[.!?…])\s+/);
+            if (sentences.length <= 2) return best.text;
+            const selSet = new Set(selTokens);
+            let bestSent = { score: 0, text: best.text };
+            for (let i = 0; i < sentences.length; i++) {
+                const chunk = [sentences[i], sentences[i + 1]].filter(Boolean).join(' ');
+                const tok = tokensForMatch(chunk);
+                if (!tok.length) continue;
+                const sc = tok.filter(t => selSet.has(t)).length / Math.max(selTokens.length, 1);
+                if (sc > bestSent.score) bestSent = { score: sc, text: chunk };
+            }
+            return bestSent.text;
+        }
+        return '';
+    }
+    function verifyModelQuote(quote, chapterIdx) {
+        const cleaned = String(quote || '').replace(/^["«»„“”'\s]+|["«»„“”'\s]+$/g, '').trim();
+        if (cleaned.length < 8) return '';
+        const scoped = getOriginalChaptersScope(chapterIdx);
+        const all = READER.originalChapters || [];
+        for (const chapters of [scoped, all]) {
+            const hay = chapters.map(c => (c.paragraphs || []).join('\n')).join('\n\n');
+            const hit = findQuoteInHaystack(hay, cleaned);
+            if (hit) return cleaned;
+            // модель могла вернуть чуть укороченную/удлинённую фразу — пробуем ядро
+            const core = cleaned.slice(0, Math.min(cleaned.length, 80));
+            if (core.length >= 12 && findQuoteInHaystack(hay, core)) return cleaned;
+        }
+        return '';
     }
 
     $('selectionOriginalBtn').addEventListener('click', async () => {
         const sel = window.getSelection();
         const selectedText = sel.toString().trim();
         if (!selectedText || !READER.hasOriginal) return;
-        if (!READER.apiKey && !READER.openrouterApiKey) { promptForApiKey(); return; }
 
+        const anchorEl = sel.anchorNode && sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentElement : sel.anchorNode;
+        const para = anchorEl ? anchorEl.closest('p[id^="p-"]') : null;
+        const chapterIdx = getChapterIndexForParagraph(para);
         selectionToolbar.classList.remove('open');
-        openModal('📄 Оригинал', '<div class="loading"><div class="loading-spinner"></div>Ищу соответствие в оригинале...</div>');
 
-        try {
-            const anchorEl = sel.anchorNode && sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentElement : sel.anchorNode;
-            const para = anchorEl ? anchorEl.closest('p[id^="p-"]') : null;
-            const chapterIdx = getChapterIndexForParagraph(para);
-            const scopedOriginalText = getOriginalSearchScope(chapterIdx);
-            let targetLangHint = detectLang(scopedOriginalText) === 'ru-RU' ? 'русский' : 'английский';
-            // Страховка: не просим перевести выделение на тот же язык, на котором оно уже есть
-            const selectionLangLabel = detectLang(selectedText) === 'ru-RU' ? 'русский' : 'английский';
-            if (targetLangHint === selectionLangLabel) targetLangHint = selectionLangLabel === 'русский' ? 'английский' : 'русский';
-
-            const translatePrompt = `Переведи следующий текст на ${targetLangHint} язык максимально близко по смыслу. Ответь только переводом, без комментариев:\n\n${selectedText}`;
-            const translated = await callLLM([
-                { role: 'system', content: 'Ты — профессиональный переводчик.' },
-                { role: 'user', content: translatePrompt }
-            ], 1000);
-
-            const wordCount = translated.split(/\s+/).filter(Boolean).length;
-            const searchPrompt = `В приведённом ниже тексте найди ТОЧНЫЙ фрагмент, соответствующий этому отрывку по смыслу:\n\n"${translated}"\n\nТекст для поиска (только для поиска, не отвечай им целиком):\n${scopedOriginalText.slice(0, 15000)}\n\nПравила:\n- Отрывок выше — примерно ${wordCount} слов. Процитируй фрагмент примерно такого же объёма — одно-два предложения, не больше.\n- Даже если нужный фрагмент внутри длинного абзаца, процитируй ТОЛЬКО его, без соседних предложений.\n- Ответь только точной цитатой, без кавычек и пояснений.`;
-            const quote = await callLLM([
-                { role: 'system', content: 'Ты — специалист по тексту, отвечаешь только точными цитатами.' },
-                { role: 'user', content: searchPrompt }
-            ], 500);
-
+        const showCompare = (quote, viaAi) => {
             openModal('📄 Сравнение с оригиналом', `
                 <div style="margin-bottom:1rem;">
                     <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem;">Выделено:</div>
@@ -3410,10 +3716,69 @@ ${excerptBlock}
                     <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem;">Оригинал:</div>
                     <div style="background:var(--bg-soft);padding:.7rem;border-radius:8px;font-style:italic;">${escapeHtml(quote)}</div>
                 </div>
+                ${viaAi ? '<p style="margin-top:.8rem;font-family:Inter,sans-serif;font-size:.75rem;color:var(--text-soft);">Найдено по смыслу, цитата сверена с файлом оригинала.</p>' : ''}
             `);
             if (para) appendMaterialsSaveBar(() => offerSaveToMaterials(para.id, 'original', selectedText, quote));
+        };
+
+        const localHit = localOriginalMatch(selectedText, chapterIdx);
+        if (localHit) { showCompare(localHit, false); return; }
+
+        const scopedOriginalText = getOriginalChaptersScope(chapterIdx)
+            .map(c => (c.paragraphs || []).join('\n')).join('\n\n');
+        const originalLang = detectLang(scopedOriginalText || selectedText);
+        const selectionLang = detectLang(selectedText);
+        const sameLanguage = originalLang === selectionLang;
+
+        // Один язык и нет буквального совпадения — не переводим «на всякий случай».
+        // Перевод на чужой язык и поиск этой фразы в том же тексте как раз давал ерунду.
+        if (sameLanguage) {
+            openModal('📄 Сравнение с оригиналом',
+                '<p>В загруженном оригинале рядом с этой главой нет достаточно близкого фрагмента. Попробуйте выделить чуть больше текста или другую фразу.</p>');
+            return;
+        }
+
+        if (!READER.apiKey && !READER.openrouterApiKey) { promptForApiKey(); return; }
+
+        openModal('📄 Оригинал', '<div class="loading"><div class="loading-spinner"></div>Ищу соответствие в оригинале...</div>');
+
+        try {
+            const wordCount = selectedText.split(/\s+/).filter(Boolean).length;
+            const targetLangHint = originalLang === 'ru-RU' ? 'русском' : 'английском';
+            const searchPrompt = `Ниже — фрагмент перевода и текст оригинала (или другой версии) на ${targetLangHint} языке.
+Найди в оригинале фрагмент, который соответствует выделенному переводу по смыслу.
+
+Выделение из перевода:
+"""
+${selectedText}
+"""
+
+Текст оригинала (только для поиска, не пересказывай его целиком):
+"""
+${scopedOriginalText.slice(0, 15000)}
+"""
+
+Правила:
+- Верни ТОЛЬКО дословную цитату из текста оригинала выше, без кавычек, перевода и пояснений.
+- Объём — примерно ${Math.max(4, Math.min(40, wordCount))} слов, одно-два предложения.
+- Нельзя добавлять слова, которых нет в оригинале.
+- Если соответствия нет — ответь ровно: НЕТ`;
+
+            const rawQuote = stripReasoningLeak(await callLLM([
+                { role: 'system', content: 'Ты ищешь дословные цитаты в данном тексте. Не выдумывай фразы. Если точного соответствия нет, отвечай «НЕТ».' },
+                { role: 'user', content: searchPrompt }
+            ], 500));
+
+            if (!rawQuote || /^нет\b/i.test(rawQuote.trim())) {
+                throw new Error('Модель не нашла соответствие в оригинале.');
+            }
+            const verified = verifyModelQuote(rawQuote, chapterIdx);
+            if (!verified) {
+                throw new Error('Ответ не совпал с текстом оригинала — цитату не показываю, чтобы не подменить фрагмент.');
+            }
+            showCompare(verified, true);
         } catch (err) {
-            openModal('Сравнение с оригиналом', `<div style="color:#ff6b6b;">❌ Ошибка: ${escapeHtml(err.message)}</div>`);
+            openModal('Сравнение с оригиналом', `<div style="color:#ff6b6b;">❌ ${escapeHtml(err.message)}</div>`);
         }
     });
 
