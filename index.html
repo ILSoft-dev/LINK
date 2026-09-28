@@ -3680,20 +3680,58 @@ ${excerptBlock}
         }
         return '';
     }
-    function verifyModelQuote(quote, chapterIdx) {
-        const cleaned = String(quote || '').replace(/^["«»„“”'\s]+|["«»„“”'\s]+$/g, '').trim();
-        if (cleaned.length < 8) return '';
-        const scoped = getOriginalChaptersScope(chapterIdx);
-        const all = READER.originalChapters || [];
-        for (const chapters of [scoped, all]) {
-            const hay = chapters.map(c => (c.paragraphs || []).join('\n')).join('\n\n');
-            const hit = findQuoteInHaystack(hay, cleaned);
-            if (hit) return cleaned;
-            // модель могла вернуть чуть укороченную/удлинённую фразу — пробуем ядро
-            const core = cleaned.slice(0, Math.min(cleaned.length, 80));
-            if (core.length >= 12 && findQuoteInHaystack(hay, core)) return cleaned;
+    // Окрестность выделения в оригинале. Раньше модели отдавали первые 15 000
+    // символов «главы±1» — а нужное место чаще лежало дальше, и модель, не найдя
+    // его, вспоминала цитату по памяти (не совпадала с файлом → «ответ не совпал»).
+    // Теперь место оцениваем по относительной позиции (внутри главы, если число
+    // глав совпадает, иначе по всей книге) и отдаём модели только это окно,
+    // разбитое на пронумерованные предложения. Модель называет номера — текст
+    // мы берём из файла сами, так что подмены быть не может.
+    function buildOriginalWindow(pIdx) {
+        const orig = READER.originalChapters || [];
+        const flat = [], chStart = [];
+        let total = 0;
+        orig.forEach((ch, ci) => {
+            chStart[ci] = total;
+            (ch.paragraphs || []).forEach(t => { flat.push({ text: t, start: total }); total += t.length + 1; });
+        });
+        chStart[orig.length] = total;
+        if (!flat.length || !ALL_PARAGRAPHS.length) return [];
+
+        const n = ALL_PARAGRAPHS.length;
+        const cum = new Array(n + 1);
+        cum[0] = 0;
+        for (let i = 0; i < n; i++) cum[i + 1] = cum[i] + ALL_PARAGRAPHS[i].textContent.length + 1;
+        const idx = Math.min(Math.max(pIdx, 0), n - 1);
+        const mid = (cum[idx] + cum[idx + 1]) / 2;
+
+        let est, W;
+        const c = chapterOfParagraph[idx];
+        if (chapterFirstParagraph.length > 1 && chapterFirstParagraph.length === orig.length && c >= 0) {
+            const cs = cum[chapterFirstParagraph[c]];
+            const ce = cum[chapterFirstParagraph[c + 1] !== undefined ? chapterFirstParagraph[c + 1] : n];
+            const frac = ce > cs ? (mid - cs) / (ce - cs) : 0;
+            est = chStart[c] + frac * (chStart[c + 1] - chStart[c]);
+            W = 6000;
+        } else {
+            est = (mid / cum[n]) * total;
+            W = 7000;
         }
-        return '';
+        const units = [];
+        flat.forEach(p => {
+            if (p.start + p.text.length < est - W || p.start > est + W) return;
+            const sentences = p.text.split(/(?<=[.!?…]["”’»)]*)\s+/).map(x => x.trim()).filter(Boolean);
+            sentences.forEach((t, i) => units.push({ text: t, sep: i === 0 ? '\n' : ' ' }));
+        });
+        return units;
+    }
+    function parseUnitRange(raw, max) {
+        const m = String(raw || '').match(/(\d+)\s*[-–—]\s*(\d+)|(\d+)/);
+        if (!m) return null;
+        let a = parseInt(m[1] || m[3]), b = parseInt(m[2] || m[3]);
+        if (a > b) [a, b] = [b, a];
+        if (a < 1 || b > max) return null;
+        return [a, b];
     }
 
     $('selectionOriginalBtn').addEventListener('click', async () => {
@@ -3716,7 +3754,7 @@ ${excerptBlock}
                     <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem;">Оригинал:</div>
                     <div style="background:var(--bg-soft);padding:.7rem;border-radius:8px;font-style:italic;">${escapeHtml(quote)}</div>
                 </div>
-                ${viaAi ? '<p style="margin-top:.8rem;font-family:Inter,sans-serif;font-size:.75rem;color:var(--text-soft);">Найдено по смыслу, цитата сверена с файлом оригинала.</p>' : ''}
+                ${viaAi ? '<p style="margin-top:.8rem;font-family:Inter,sans-serif;font-size:.75rem;color:var(--text-soft);">Найдено по смыслу; текст взят прямо из файла оригинала.</p>' : ''}
             `);
             if (para) appendMaterialsSaveBar(() => offerSaveToMaterials(para.id, 'original', selectedText, quote));
         };
@@ -3724,9 +3762,9 @@ ${excerptBlock}
         const localHit = localOriginalMatch(selectedText, chapterIdx);
         if (localHit) { showCompare(localHit, false); return; }
 
-        const scopedOriginalText = getOriginalChaptersScope(chapterIdx)
-            .map(c => (c.paragraphs || []).join('\n')).join('\n\n');
-        const originalLang = detectLang(scopedOriginalText || selectedText);
+        const paraIdx = para ? ALL_PARAGRAPHS.indexOf(para) : Math.max(0, firstVisibleParagraphIndex());
+        const units = buildOriginalWindow(paraIdx);
+        const originalLang = detectLang(units.map(u => u.text).join(' ') || selectedText);
         const selectionLang = detectLang(selectedText);
         const sameLanguage = originalLang === selectionLang;
 
@@ -3737,46 +3775,51 @@ ${excerptBlock}
                 '<p>В загруженном оригинале рядом с этой главой нет достаточно близкого фрагмента. Попробуйте выделить чуть больше текста или другую фразу.</p>');
             return;
         }
+        if (!units.length) {
+            openModal('📄 Сравнение с оригиналом', '<p>Не удалось разобрать текст оригинала.</p>');
+            return;
+        }
 
         if (!READER.apiKey && !READER.openrouterApiKey) { promptForApiKey(); return; }
 
         openModal('📄 Оригинал', '<div class="loading"><div class="loading-spinner"></div>Ищу соответствие в оригинале...</div>');
 
         try {
-            const wordCount = selectedText.split(/\s+/).filter(Boolean).length;
-            const targetLangHint = originalLang === 'ru-RU' ? 'русском' : 'английском';
-            const searchPrompt = `Ниже — фрагмент перевода и текст оригинала (или другой версии) на ${targetLangHint} языке.
-Найди в оригинале фрагмент, который соответствует выделенному переводу по смыслу.
+            const selSentences = selectedText.split(/(?<=[.!?…])\s+/).filter(Boolean).length;
+            const maxSpan = Math.min(6, Math.max(2, selSentences + 1));
+            const numbered = units.map((u, i) => `[${i + 1}] ${u.text}`).join('\n');
+            const searchPrompt = `Ниже — выделенный фрагмент перевода и пронумерованные предложения оригинала (окрестность этого места в книге).
+Найди, какие предложения оригинала соответствуют выделению по смыслу.
 
 Выделение из перевода:
 """
 ${selectedText}
 """
 
-Текст оригинала (только для поиска, не пересказывай его целиком):
-"""
-${scopedOriginalText.slice(0, 15000)}
-"""
+Предложения оригинала:
+${numbered}
 
 Правила:
-- Верни ТОЛЬКО дословную цитату из текста оригинала выше, без кавычек, перевода и пояснений.
-- Объём — примерно ${Math.max(4, Math.min(40, wordCount))} слов, одно-два предложения.
-- Нельзя добавлять слова, которых нет в оригинале.
-- Если соответствия нет — ответь ровно: НЕТ`;
+- Ответь ТОЛЬКО номером или диапазоном номеров из списка, например: 17 или 17-19. Ничего больше.
+- Не больше ${maxSpan} предложений подряд.
+- Если в списке нет соответствия — ответь ровно: НЕТ`;
 
-            const rawQuote = stripReasoningLeak(await callLLM([
-                { role: 'system', content: 'Ты ищешь дословные цитаты в данном тексте. Не выдумывай фразы. Если точного соответствия нет, отвечай «НЕТ».' },
+            const rawAnswer = stripReasoningLeak(await callLLM([
+                { role: 'system', content: 'Ты сопоставляешь фрагмент перевода с предложениями оригинала. Отвечай только номерами из списка или словом НЕТ.' },
                 { role: 'user', content: searchPrompt }
-            ], 500));
+            ], 600));
 
-            if (!rawQuote || /^нет\b/i.test(rawQuote.trim())) {
-                throw new Error('Модель не нашла соответствие в оригинале.');
+            if (!rawAnswer || /^нет\b/i.test(rawAnswer.trim())) {
+                throw new Error('Рядом с этим местом соответствия не нашлось. Попробуйте выделить чуть больше текста.');
             }
-            const verified = verifyModelQuote(rawQuote, chapterIdx);
-            if (!verified) {
-                throw new Error('Ответ не совпал с текстом оригинала — цитату не показываю, чтобы не подменить фрагмент.');
+            const range = parseUnitRange(rawAnswer, units.length);
+            if (!range) {
+                throw new Error('Модель ответила не номерами предложений. Попробуйте ещё раз.');
             }
-            showCompare(verified, true);
+            let [from, to] = range;
+            if (to - from + 1 > maxSpan) to = from + maxSpan - 1;
+            const quote = units.slice(from - 1, to).map((u, i) => (i ? u.sep : '') + u.text).join('').trim();
+            showCompare(quote, true);
         } catch (err) {
             openModal('Сравнение с оригиналом', `<div style="color:#ff6b6b;">❌ ${escapeHtml(err.message)}</div>`);
         }
