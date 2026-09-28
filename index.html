@@ -3478,6 +3478,58 @@ ${langLine}
     // конкретный абзац и цитата); из панели «Ассистент» — undefined, и тогда
     // в материалы вопрос не попадает (ему некуда деться — у него нет места
     // в книге, см. ТЗ «Материалы по книге»).
+    // ===== Тип книги для «Вопроса» =====
+    // story — сюжетная (проза, биографии, мемуары): отвечаем строго по
+    // прочитанному, без спойлеров. learn — учебная/научпоп/техническая: спойлеров
+    // нет, зато полезно объяснить шире текста. Тип определяется один раз (по
+    // названию, заголовкам глав и двум отрывкам), кэшируется на книгу и меняется
+    // вручную чипом в окне вопроса. Ошибка/неясный ответ → безопасный story.
+    function getBookType() {
+        const v = bookLoad('bookType');
+        return v === 'story' || v === 'learn' ? v : '';
+    }
+    function bookTypeChipLabel() {
+        const t = getBookType();
+        if (t === 'story') return '📖 Сюжетная книга: без спойлеров ⇄';
+        if (t === 'learn') return '🎓 Учебная книга: отвечаю шире ⇄';
+        return '✨ Тип книги: определю сам ⇄';
+    }
+    function sampleBookText() {
+        const n = ALL_PARAGRAPHS.length;
+        const take = (from, maxChars) => {
+            let out = '';
+            for (let i = from; i < n && out.length < maxChars; i++) out += ALL_PARAGRAPHS[i].textContent.trim() + '\n';
+            return out.slice(0, maxChars + 200);
+        };
+        // начало книги часто занято выходными данными — добавляем отрывок из середины
+        return take(0, 1500) + '\n…\n' + take(Math.floor(n * 0.5), 1200);
+    }
+    async function detectBookType() {
+        const titles = Array.from(document.querySelectorAll('#bookContent .chapter-title'))
+            .slice(0, 15).map(e => e.textContent.trim()).filter(Boolean).join('; ');
+        const prompt = `Определи тип книги по названию, заголовкам глав и двум отрывкам.
+
+Название: ${READER.bookTitle || '—'}
+Заголовки глав: ${titles || '—'}
+
+Отрывки:
+---
+${sampleBookText()}
+---
+
+СЮЖЕТНАЯ — художественная проза и любая книга, где важен порядок событий: романы, повести, рассказы, биографии, мемуары, исторические повествования.
+УЧЕБНАЯ — книга для понимания понятий и навыков: учебники, научпоп, самоучители, техническая, деловая, справочная литература.
+
+Ответь одним словом: СЮЖЕТНАЯ или УЧЕБНАЯ.`;
+        const raw = stripReasoningLeak(await callLLM([
+            { role: 'system', content: 'Ты определяешь тип книги. Отвечай одним словом.' },
+            { role: 'user', content: prompt }
+        ], 200)) || '';
+        const t = /^\W*учебн/i.test(raw) ? 'learn' : /^\W*сюжет/i.test(raw) ? 'story' : '';
+        if (t) bookSave('bookType', t);
+        return t || 'story';
+    }
+
     async function askQuestion(excerpt, paragraphId) {
         const currentIdx = getCurrentParagraphIndex();
         if (currentIdx < 0) { openModal('Вопрос по содержанию', 'Прочитайте хотя бы несколько абзацев, чтобы задать вопрос.'); return; }
@@ -3489,11 +3541,17 @@ ${langLine}
         openModal('❓ Вопрос по содержанию', `
             <p style="margin-bottom:.7rem;">Спросите что-нибудь о прочитанной части — персонажи, события, детали.</p>
             ${excerptHint}
+            <button id="askTypeChip" type="button" style="font-family:Inter,sans-serif;font-size:.78rem;padding:.35rem .8rem;border-radius:999px;border:1px solid var(--border);background:var(--bg-soft);color:var(--text-soft);cursor:pointer;margin-bottom:.7rem;">${bookTypeChipLabel()}</button>
             <textarea id="askQuestionInput" rows="3" style="width:100%;box-sizing:border-box;padding:.6rem;border-radius:8px;border:1px solid var(--border);background:var(--bg-soft);color:var(--text);font-family:inherit;font-size:.95rem;resize:vertical;" placeholder="${excerpt ? 'Например: кто это?' : 'Например: кто такой Норрис?'}"></textarea>
             <button class="btn-primary" id="askQuestionSubmit" style="margin-top:.7rem;">Спросить</button>
         `);
 
         $('askQuestionInput').focus();
+        $('askTypeChip').addEventListener('click', () => {
+            const order = ['', 'story', 'learn'];
+            bookSave('bookType', order[(order.indexOf(getBookType()) + 1) % order.length]);
+            $('askTypeChip').textContent = bookTypeChipLabel();
+        });
         $('askQuestionSubmit').addEventListener('click', async () => {
             const question = $('askQuestionInput').value.trim();
             if (!question) return;
@@ -3507,7 +3565,28 @@ ${langLine}
             openModal('❓ Вопрос по содержанию', '<div class="loading"><div class="loading-spinner"></div>Ищу ответ...</div>');
 
             try {
-                const prompt = `Ты отвечаешь на вопрос читателя по прочитанной им части текста ${bookLabel}. Отвечай СТРОГО на основе текста ниже — если ответа там нет (например, событие ещё не произошло в прочитанной части), честно скажи об этом, не выдумывай и не забегай вперёд по сюжету. Отвечай на языке текста.
+                let bookType = getBookType();
+                if (!bookType) {
+                    try { bookType = await detectBookType(); } catch (e) { bookType = 'story'; }
+                }
+                const learn = bookType === 'learn';
+
+                const prompt = learn
+                    ? `Ты помогаешь читателю разобраться с учебной (нехудожественной) книгой ${bookLabel}. Ниже — часть текста, которую он уже прочитал.
+
+Правила:
+- В первую очередь опирайся на текст ниже и ссылайся на него.
+- Можно объяснять шире текста: раскрывать понятия, давать примеры и аналогии, приводить общеизвестные факты. Всё, что ты добавляешь от себя, начинай словами «Вне книги:».
+- Не приписывай автору того, чего нет в прочитанном тексте. Если вопрос о том, что автор говорит дальше, — так и скажи.
+- Отвечай на языке текста.
+
+Текст (прочитанная часть):
+---
+${text}
+---
+${excerptBlock}
+Вопрос читателя: ${question}`
+                    : `Ты отвечаешь на вопрос читателя по прочитанной им части текста ${bookLabel}. Отвечай СТРОГО на основе текста ниже — если ответа там нет (например, событие ещё не произошло в прочитанной части), честно скажи об этом, не выдумывай и не забегай вперёд по сюжету. Отвечай на языке текста.
 
 Текст (прочитанная часть):
 ---
@@ -3517,9 +3596,11 @@ ${excerptBlock}
 Вопрос читателя: ${question}`;
 
                 const answer = await callLLM([
-                    { role: 'system', content: 'Ты — внимательный собеседник по книге, отвечаешь строго по тексту и честно признаёшь, если ответа в нём нет.' },
+                    { role: 'system', content: learn
+                        ? 'Ты — терпеливый репетитор по этой книге: объясняешь ясно, опираешься на текст и честно отделяешь книгу от общих знаний.'
+                        : 'Ты — внимательный собеседник по книге, отвечаешь строго по тексту и честно признаёшь, если ответа в нём нет.' },
                     { role: 'user', content: prompt }
-                ], 1200);
+                ], learn ? 1500 : 1200);
 
                 openModal('❓ Вопрос по содержанию', `
                     <div style="margin-bottom:1rem;">
@@ -3530,6 +3611,7 @@ ${excerptBlock}
                         <div style="font-weight:700;color:var(--accent);margin-bottom:.3rem;">Ответ:</div>
                         <div style="background:var(--bg-soft);padding:.7rem;border-radius:8px;">${escapeHtml(answer)}</div>
                     </div>
+                    ${learn ? '<p style="margin-top:.8rem;font-family:Inter,sans-serif;font-size:.75rem;color:var(--text-soft);">Режим «учебная книга»: ответ может выходить за рамки прочитанного (такие места помечены «Вне книги»). Сменить режим — в окне вопроса.</p>' : ''}
                 `);
                 // Вопрос из тулбара выделения (есть отрывок и абзац) — можно
                 // оставить в материалах; из панели «Ассистент» — нет, там нет привязки к месту.
