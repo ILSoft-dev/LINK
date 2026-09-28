@@ -2062,7 +2062,6 @@
         renderBookmarks();
         syncMaterialsMarks();
         applyFontSize();
-        migrateLegacyProgress();
 
         // Кнопка "Оригинал" в тулбаре выделения доступна только если файл B загружен и выбран LINK
         $('selectionOriginalBtn').style.display = READER.hasOriginal ? 'flex' : 'none';
@@ -2077,8 +2076,13 @@
         $('helpBtn').style.display = 'none';
 
         setPanelsHidden(false);
-        saveToShelf();
-        restoreReaderScroll(READER.lastScrollTop);
+        // Миграция/починка прогресса и запись на полку — только когда экран
+        // показан и раскладка устоялась (иначе offsetTop = 0, см. paragraphIndexAtY)
+        restoreReaderScroll(READER.lastScrollTop, () => {
+            migrateLegacyProgress();
+            repairProgress();
+            saveToShelf();
+        });
     }
 
     // Одноразовая миграция: раньше самое дальнее место хранилось в пикселях
@@ -2093,7 +2097,24 @@
         if (idx >= 0) bookSave('furthestParagraph', idx);
     }
 
-    function restoreReaderScroll(y) {
+    // Разовая починка: в первой версии миграции индекс считался на скрытом экране
+    // и у всех мигрированных книг становился «последним абзацем» (100%). Старый
+    // пиксельный furthestScrollBottom при этом остался в хранилище. Верхняя
+    // граница честного прогресса неизвестна, поэтому берём максимум из старого
+    // значения и текущей позиции чтения — ниже них прогресс быть не может.
+    function repairProgress() {
+        if (bookLoad('progressRepaired') === '1') return;
+        bookSave('progressRepaired', '1');
+        const legacyPx = parseInt(bookLoad('furthestScrollBottom')) || 0;
+        if (legacyPx <= 0 || READER.furthestParagraph < 0) return;
+        const floorIdx = paragraphIndexAtY(Math.max(legacyPx, READER.lastScrollTop + window.innerHeight));
+        if (floorIdx >= 0 && READER.furthestParagraph > floorIdx) {
+            READER.furthestParagraph = floorIdx;
+            bookSave('furthestParagraph', floorIdx);
+        }
+    }
+
+    function restoreReaderScroll(y, onSettled) {
         // Двухфазно: шрифты и раскладка после innerHTML могут ещё не
         // устаканиться, и scrollTo клэмпнется к меньшей высоте. Пока
         // восстанавливаем — updateProgress не пишет lastScrollTop (иначе
@@ -2110,6 +2131,7 @@
                 paintProgress(window.scrollY);
                 isRestoringScroll = false;
                 positionPanelRestoreBtn();
+                if (onSettled) onSettled();
             });
         };
         const fontsReady = (document.fonts && document.fonts.ready)
@@ -3109,6 +3131,9 @@
     // Индекс абзаца не зависит от шрифта и полей — пиксели считаются заново
     // только для ТЕКУЩЕЙ позиции (см. paragraphIndexAtY).
     function paragraphIndexAtY(y) {
+        // Пока экран читалки скрыт (display:none), offsetTop у всех абзацев = 0 —
+        // тогда «последний абзац выше линии» ошибочно оказался бы последним в книге.
+        if (ALL_PARAGRAPHS.length > 1 && ALL_PARAGRAPHS[ALL_PARAGRAPHS.length - 1].offsetTop === 0) return -1;
         // последний абзац, чей верх выше линии y; offsetTop растёт монотонно — бинарный поиск
         let lo = 0, hi = ALL_PARAGRAPHS.length - 1, res = -1;
         while (lo <= hi) {
