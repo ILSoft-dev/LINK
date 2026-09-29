@@ -27,6 +27,22 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="icon" href="icons/icon-192.png">
 <link rel="stylesheet" href="fonts.css">
+<script>
+// Тема — синхронно, до отрисовки: иначе страница на миг рисуется светлой
+// (дефолт из :root), а потом основной скрипт в конце body её переключает —
+// заметная вспышка. localStorage тут читаем напрямую (safeStorage определяется
+// в основном скрипте, до него ещё далеко), и без try/catch не обойтись:
+// localStorage может быть недоступен (приватный режим и т.п.).
+(function () {
+    try {
+        var t = localStorage.getItem('link_theme');
+        if (t !== 'dark' && t !== 'ink') {
+            t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : null;
+        }
+        if (t === 'dark' || t === 'ink') document.documentElement.classList.add('theme-preload-' + t);
+    } catch (e) {}
+})();
+</script>
 <style>
     @property --bg { syntax: '<color>'; inherits: true; initial-value: #F7F0E1; }
     @property --bg-soft { syntax: '<color>'; inherits: true; initial-value: #ECDFC8; }
@@ -49,7 +65,7 @@
         --shadow: 0 20px 60px rgba(43,38,34,0.10);
         --theme-ease: background-color .4s ease, color .4s ease, border-color .4s ease, fill .4s ease, stroke .4s ease;
     }
-    body.dark{
+    html.theme-preload-dark, body.dark{
         --bg:#1C1A17;
         --bg-soft:#262320;
         --bg-card:#221F1B;
@@ -63,7 +79,7 @@
     /* «Ink» — монохромный режим под e-ink: без цвета вообще, только градации
        серого, как на электронных чернилах — вместо тёплого фирменного
        бордового акцента используется тёмно-серый. */
-    body.ink{
+    html.theme-preload-ink, body.ink{
         --bg:#FFFFFF;
         --bg-soft:#ECECEC;
         --bg-card:#F7F7F7;
@@ -854,6 +870,9 @@
     function setTheme(mode) {
         document.body.classList.remove('dark', 'ink');
         if (mode === 'dark' || mode === 'ink') document.body.classList.add(mode);
+        // preload-класс с <html> сделал своё дело до этого момента; дальше тема
+        // держится на body.dark/body.ink (см. синхронный скрипт в <head>)
+        document.documentElement.classList.remove('theme-preload-dark', 'theme-preload-ink');
         themeIcon.innerHTML = THEME_ICONS[mode];
         themeBtn.title = THEME_TITLES[mode];
         safeStorage.setItem('link_theme', mode);
